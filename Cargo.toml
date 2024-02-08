@@ -7,6 +7,7 @@ members = [
 
 [workspace.dependencies]
 clap = "4.5.0"
+rusqlite = "0.29.0"
 serde = "1.0.196"
 
 rippkgs-db = { path = "rippkgs-db", version = "=0.1.0" }

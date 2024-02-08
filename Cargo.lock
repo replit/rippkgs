@@ -1946,8 +1946,10 @@ dependencies = [
  "clap",
  "nix-index",
  "rippkgs-db",
+ "sea-orm",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2380,6 +2382,7 @@ dependencies = [
  "indexmap",
  "log",
  "memchr",
+ "native-tls",
  "once_cell",
  "paste",
  "percent-encoding",
@@ -2391,6 +2394,8 @@ dependencies = [
  "sqlformat",
  "thiserror",
  "time",
+ "tokio",
+ "tokio-stream",
  "tracing",
  "url",
  "uuid",
@@ -2431,6 +2436,7 @@ dependencies = [
  "sqlx-sqlite",
  "syn 1.0.109",
  "tempfile",
+ "tokio",
  "url",
 ]
 
