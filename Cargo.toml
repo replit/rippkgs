@@ -9,10 +9,11 @@ members = [
 [workspace.dependencies]
 clap = "4.5.0"
 eyre = "0.6.12"
-rusqlite = "0.29.0"
-# sea-orm = "0.12.14"
+libsqlite3-sys = "0.27.0"
+rusqlite = "0.30.0"
 sqlx = "0.7.3"
 serde = "1.0.196"
+tokio = "1.36.0"
 
 rippkgs-db = { path = "rippkgs-db", version = "=0.1.0" }
 

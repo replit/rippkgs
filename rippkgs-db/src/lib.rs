@@ -1,5 +1,3 @@
-pub mod package;
-
 pub struct Package {
     pub attribute: String,
     pub store_path: String,

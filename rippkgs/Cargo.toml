@@ -8,8 +8,9 @@ edition = "2021"
 [dependencies]
 clap = { workspace = true, features = ["derive"] }
 eyre.workspace = true
-# sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-native-tls"] }
 sqlx = { workspace = true, features = ["sqlite", "runtime-tokio", "tls-rustls"] }
-tokio = { version = "1.36.0", features = ["rt", "macros"] }
-
+tokio = { workspace = true, features = ["rt", "macros"] }
 rippkgs-db.workspace = true
+rusqlite = { workspace = true, features = ["functions"] }
+fuzzy-matcher = "0.3.7"
+lazy_static = "1.4.0"
