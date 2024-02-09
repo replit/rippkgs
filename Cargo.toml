@@ -1,13 +1,17 @@
 [workspace]
 resolver = "2"
 members = [
+	"rippkgs",
 	"rippkgs-db",
 	"rippkgs-index",
 ]
 
 [workspace.dependencies]
 clap = "4.5.0"
+eyre = "0.6.12"
 rusqlite = "0.29.0"
+# sea-orm = "0.12.14"
+sqlx = "0.7.3"
 serde = "1.0.196"
 
 rippkgs-db = { path = "rippkgs-db", version = "=0.1.0" }

@@ -31,6 +31,7 @@
       devshells.default = {
         packages = [
           inputs'.fenix.packages.latest.toolchain
+          pkgs.sqlite
         ];
       };
     };

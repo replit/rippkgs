@@ -3,11 +3,18 @@
 
 mod data;
 
-use std::{collections::HashMap, fs::File, path::PathBuf};
+use std::{
+    collections::{HashMap, VecDeque},
+    fs::File,
+    io::{self, Write},
+    path::PathBuf,
+    process::Command,
+};
 
 use clap::Parser;
-use rippkgs_db::package;
-use sea_orm::{ActiveModelTrait, ActiveValue, ConnectionTrait, Database, Schema};
+use data::PackageInfo;
+use eyre::Context;
+use sqlx::{Connection, Executor};
 
 #[derive(Debug, Parser)]
 struct Opts {
@@ -16,88 +23,39 @@ struct Opts {
     output: PathBuf,
 
     /// The flake URI of the nixpkgs to index.
+    ///
+    /// If this is provided, then the registry will optionally be cached at `--registry`.
+    ///
+    /// If this is empty, `--registry` must be provided.
     #[arg(short, long)]
-    nixpkgs: String,
+    nixpkgs: Option<String>,
+
+    /// The file for the cached registry.
+    ///
+    /// If `--nixpkgs` is provided, then this will cache the registry at the given path.
+    ///
+    /// If `--nixpkgs` is empty, then this file will be used in lieu of evaluating nixpkgs.
+    #[arg(short, long)]
+    registry: Option<PathBuf>,
 
     /// The value to pass as the config parameter to nixpkgs.
+    ///
+    /// Only used if `--nixpkgs` is provided.
     #[arg(short = 'c', long)]
     nixpkgs_config: Option<String>,
 }
 
 #[unix_sigpipe = "inherit"]
-#[tokio::main]
-async fn main() {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> eyre::Result<()> {
     let opts = Opts::parse();
 
-    // let nixpkgs_var = format!("nixpkgs={}", opts.nixpkgs);
-    // let mut args = vec![
-    //     "--json",
-    //     "-f",
-    //     "<nixpkgs>",
-    //     "-I",
-    //     nixpkgs_var.as_str(),
-    //     "-qa",
-    //     "--meta",
-    //     "--out-path",
-    // ];
-    //
-    // if let Some(config) = opts.nixpkgs_config.as_ref() {
-    //     args.push("--arg");
-    //     args.push("config");
-    //     args.push(config.as_str());
-    // }
-    //
-    // let output = Command::new("nix-env")
-    //     .args(args.iter())
-    //     .output()
-    //     .expect("failed to get nixpkgs packages");
-    //
-    // if !output.status.success() {
-    //     panic!(
-    //         "nix-env failed: {}",
-    //         String::from_utf8_lossy(&output.stderr)
-    //     );
-    // }
-    //
-    // File::options()
-    //     .write(true)
-    //     .truncate(true)
-    //     .create(true)
-    //     .open("nixpkgs.json")
-    //     .expect("couldn't open nixpkgs.json")
-    //     .write(&output.stdout)
-    //     .expect("couldn't write nixpkgs.json");
-    //
-    // let registry = serde_json::from_slice::<HashMap<String, data::PackageInfo>>(&output.stdout)
-    //     .expect("unable to read nixpkgs registry JSON");
-
-    let registry = serde_json::from_reader::<_, HashMap<String, data::PackageInfo>>(
-        File::options()
-            .read(true)
-            .open("nixpkgs.json")
-            .expect("couldn't open nixpkgs.json"),
-    )
-    .expect("unable to read nixpkgs registry JSON");
-
-    // println!(
-    //     "{}",
-    //     registry
-    //         .iter()
-    //         .map(|(attr, info)| format!(
-    //             "{attr}: meta={} outs={}",
-    //             info.meta.is_some(),
-    //             !info.outputs.is_empty()
-    //         ))
-    //         .collect::<Vec<_>>()
-    //         .join("\n")
-    // );
-
-    // eprintln!("{output}");
+    let registry = get_registry(&opts)?;
 
     match std::fs::remove_file(opts.output.as_path()) {
         Ok(()) => (),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
-        Err(err) => panic!("error deleting previous index: {:?}", err),
+        Err(err) => Err(err).context("unable to create index db")?,
     }
 
     std::fs::File::options()
@@ -106,52 +64,116 @@ async fn main() {
         .open(dbg!(opts.output.as_path()))
         .unwrap();
 
-    let mut database = Database::connect(format!("sqlite:{}", opts.output.display()))
-        .await
-        .expect("unable to open sqlite db");
-    let db = &mut database;
+    let conn =
+        &mut sqlx::SqliteConnection::connect(format!("sqlite:{}", opts.output.display()).as_str())
+            .await
+            .context("unable to connect to index database")?;
 
-    let db_backend = db.get_database_backend();
-    let schema = Schema::new(db_backend);
-    db.execute(db_backend.build(&schema.create_table_from_entity(package::Entity)).into())
-      .await
-      .expect("unable to create package table");
+    conn.execute(sqlx::query_file_unchecked!("../queries/init.sql"))
+        .await
+        .context("unable to initialize database")?;
 
     for (attr, info) in registry.into_iter() {
-        let attribute = ActiveValue::set(attr.clone());
         let store_path = match info.outputs.get("out") {
-            Some(out) => ActiveValue::set(out.display().to_string()),
+            Some(out) => out.display().to_string(),
             None => continue,
         };
-        let name = ActiveValue::set(info.pname.unwrap_or_else(|| attr.clone()));
-        let version = ActiveValue::set(info.version.unwrap());
-        let description = ActiveValue::set(
-            info.meta
-                .as_ref()
-                .map(|meta| meta.description.clone())
-                .flatten(),
-        );
-        let homepage = ActiveValue::set(None);
-        let long_description = ActiveValue::set(
-            info.meta
-                .as_ref()
-                .map(|meta| meta.long_description.clone())
-                .flatten(),
-        );
 
-        println!("saving {attr}: sp={store_path:?} n={name:?} v={version:?} d={description:?}");
+        let name = info.pname.as_ref().unwrap_or(&attr).as_str();
+        let version = info.version.as_ref().unwrap().as_str();
+        let description = info
+            .meta
+            .as_ref()
+            .map(|meta| meta.description.clone())
+            .flatten();
+        let long_description = info
+            .meta
+            .as_ref()
+            .map(|meta| meta.long_description.clone())
+            .flatten();
 
-        package::ActiveModel {
-            attribute,
+        let create_row_query = sqlx::query_file_as!(
+            rippkgs_db::Package,
+            "../queries/add-package.sql",
+            attr,
             store_path,
             name,
             version,
             description,
-            homepage,
+            None::<String>,
             long_description,
-        }
-        .insert(db)
-        .await
-        .expect("unable to save package");
+        );
+
+        conn.execute(create_row_query)
+            .await
+            .context("could not insert package into database")?;
     }
+
+    Ok(())
+}
+
+fn get_registry(
+    Opts {
+        nixpkgs,
+        registry,
+        nixpkgs_config,
+        ..
+    }: &Opts,
+) -> eyre::Result<HashMap<String, PackageInfo>> {
+    let registry_reader: Box<dyn io::Read> = if let Some(nixpkgs) = nixpkgs {
+        let nixpkgs_var = format!("nixpkgs={}", nixpkgs);
+
+        let mut args = vec![
+            "--json",
+            "-f",
+            "<nixpkgs>",
+            "-I",
+            nixpkgs_var.as_str(),
+            "-qa",
+            "--meta",
+            "--out-path",
+        ];
+
+        if let Some(config) = nixpkgs_config.as_ref() {
+            args.push("--arg");
+            args.push("config");
+            args.push(config.as_str());
+        }
+
+        let output = Command::new("nix-env")
+            .args(args.iter())
+            .output()
+            .expect("failed to get nixpkgs packages");
+
+        if !output.status.success() {
+            panic!(
+                "nix-env failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+
+        if let Some(registry) = registry {
+            File::options()
+                .write(true)
+                .truncate(true)
+                .create(true)
+                .open(registry)
+                .context("couldn't open registry file")?
+                .write(&output.stdout)
+                .context("couldn't write registry file")?;
+        }
+
+        Box::new(VecDeque::from(output.stdout))
+    } else if let Some(registry) = registry {
+        let f = File::options()
+            .read(true)
+            .open(registry)
+            .context("couldn't open registry file")?;
+
+        Box::new(f)
+    } else {
+        return Err(eyre::eyre!("expected nixpkgs location or cached registry"));
+    };
+
+    serde_json::from_reader(registry_reader).context("unable to read registry JSON")
 }
