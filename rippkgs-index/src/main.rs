@@ -150,7 +150,7 @@ async fn main() {
             homepage,
             long_description,
         }
-        .save(db)
+        .insert(db)
         .await
         .expect("unable to save package");
     }
