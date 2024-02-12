@@ -23,6 +23,7 @@
   outputs = inputs: inputs.flake-parts.lib.mkFlake {inherit inputs;} {
     imports = [
       inputs.devshell.flakeModule
+      inputs.flake-parts.flakeModules.easyOverlay
     ];
 
     systems = [
@@ -30,17 +31,17 @@
       "x86_64-linux"
     ];
 
-    perSystem = { lib, pkgs, rust-toolchain, self', system, ... }: {
+    perSystem = { config, lib, pkgs, rust-toolchain, self', system, ... }: {
       _module.args = {
-        pkgs = import inputs.nixpkgs {
-          inherit system;
+        # pkgs = import inputs.nixpkgs {
+        #   inherit system;
 
-          overlays = [
-            inputs.fenix.overlays.default
-          ];
-        };
+          # overlays = [
+          #   inputs.fenix.overlays.default
+          # ];
+        # };
 
-        rust-toolchain = pkgs.fenix.latest.toolchain;
+        rust-toolchain = inputs.fenix.packages.${system}.stable;
       };
 
       formatter = pkgs.alejandra;
@@ -48,13 +49,17 @@
       devShells.default = self'.devShells.rippkgs;
       devshells.rippkgs = {
         packages = [
-          pkgs.fenix.latest.toolchain
+          rust-toolchain.toolchain
           pkgs.sqlite
         ];
       };
 
+      overlayAttrs = {
+        inherit (config.packages) rippkgs rippkgs-index;
+      };
+
       packages = let
-        craneLib = inputs.crane.lib.${system}.overrideToolchain rust-toolchain;
+        craneLib = inputs.crane.lib.${system}.overrideToolchain rust-toolchain.toolchain;
 
         common-args = {
           src = craneLib.cleanCargoSource (craneLib.path ./.);
@@ -74,7 +79,6 @@
         rippkgs = craneLib.buildPackage (common-args // {
           inherit cargoArtifacts;
           pname = "rippkgs";
-          # cargoExtraArgs = "--bin rippkgs";
         });
 
         rippkgs-index = craneLib.buildPackage (common-args // {

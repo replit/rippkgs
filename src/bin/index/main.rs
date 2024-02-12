@@ -1,6 +1,3 @@
-#![feature(assert_matches)]
-#![feature(unix_sigpipe)]
-
 mod data;
 
 use std::{
