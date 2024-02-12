@@ -18,6 +18,7 @@ struct Opts {
 
     query: String,
 
+    /// The number of results to return
     #[arg(default_value = "30")]
     num_results: u32,
 
@@ -86,7 +87,7 @@ LIMIT ?2
     }
 
     let elapsed = start.elapsed();
-    println!("finished in {}.{} seconds", elapsed.as_secs(), elapsed.subsec_micros() / 100);
+    println!("finished in {} ms", elapsed.as_millis());
 
     Ok(())
 }

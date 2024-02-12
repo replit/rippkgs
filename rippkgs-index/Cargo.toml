@@ -6,14 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rippkgs-db.workspace = true
-
 clap = { workspace = true, features = ["derive"] }
 eyre.workspace = true
-# nix-index = "0.1.7"
 rusqlite.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json = "1.0.113"
-# sea-orm = { version = "0.12.14", features = ["sqlx-sqlite", "runtime-tokio-native-tls"] }
-tokio = { version = "1.36.0", features = ["rt", "macros"] }
-sqlx = { workspace = true, features = ["sqlite", "runtime-tokio", "tls-rustls"] }

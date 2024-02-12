@@ -9,13 +9,13 @@ use std::{
     io::{self, Write},
     path::PathBuf,
     process::Command,
+    time::Instant,
 };
 
 use clap::Parser;
 use data::PackageInfo;
 use eyre::{Context, Result};
 use rusqlite::OpenFlags;
-use sqlx::{Connection, Executor};
 
 #[derive(Debug, Parser)]
 struct Opts {
@@ -57,7 +57,7 @@ fn main() -> Result<()> {
         Err(err) => Err(err).context("unable to remove previous index db")?,
     }
 
-    let mut conn = rusqlite::Connection::open_with_flags(
+    let conn = rusqlite::Connection::open_with_flags(
         opts.output,
         OpenFlags::SQLITE_OPEN_CREATE
             | OpenFlags::SQLITE_OPEN_READ_WRITE
@@ -91,6 +91,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
         )
         .context("unable to prepare INSERT query")?;
 
+    let start = Instant::now();
+
     for (attr, info) in registry.into_iter() {
         let store_path = match info.outputs.get("out") {
             Some(out) => out.display().to_string(),
@@ -123,6 +125,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
             .context("could not insert package into database")?;
     }
 
+    println!("wrote index in {:.4} seconds", start.elapsed().as_secs_f64());
+
     Ok(())
 }
 
@@ -154,10 +158,14 @@ fn get_registry(
             args.push(config.as_str());
         }
 
+        let start = Instant::now();
+
         let output = Command::new("nix-env")
             .args(args.iter())
             .output()
             .expect("failed to get nixpkgs packages");
+
+        println!("evaluated registry in {:.4} seconds", start.elapsed().as_secs_f64());
 
         if !output.status.success() {
             panic!(
@@ -189,5 +197,9 @@ fn get_registry(
         return Err(eyre::eyre!("expected nixpkgs location or cached registry"));
     };
 
-    serde_json::from_reader(registry_reader).context("unable to read registry JSON")
+    let start = Instant::now();
+    let res = serde_json::from_reader(registry_reader).context("unable to read registry JSON");
+    println!("parsed registry in {:.4} seconds", start.elapsed().as_secs_f64());
+
+    res
 }
