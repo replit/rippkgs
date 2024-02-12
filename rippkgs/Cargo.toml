@@ -8,9 +8,6 @@ edition = "2021"
 [dependencies]
 clap = { workspace = true, features = ["derive"] }
 eyre.workspace = true
-sqlx = { workspace = true, features = ["sqlite", "runtime-tokio", "tls-rustls"] }
-tokio = { workspace = true, features = ["rt", "macros"] }
-rippkgs-db.workspace = true
 rusqlite = { workspace = true, features = ["functions"] }
 fuzzy-matcher = "0.3.7"
 lazy_static = "1.4.0"

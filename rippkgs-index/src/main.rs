@@ -13,7 +13,8 @@ use std::{
 
 use clap::Parser;
 use data::PackageInfo;
-use eyre::Context;
+use eyre::{Context, Result};
+use rusqlite::OpenFlags;
 use sqlx::{Connection, Executor};
 
 #[derive(Debug, Parser)]
@@ -45,33 +46,50 @@ struct Opts {
     nixpkgs_config: Option<String>,
 }
 
-#[unix_sigpipe = "inherit"]
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> eyre::Result<()> {
+fn main() -> Result<()> {
     let opts = Opts::parse();
 
-    let registry = get_registry(&opts)?;
+    let registry = get_registry(&opts).context("unable to get nixpkgs registry")?;
 
     match std::fs::remove_file(opts.output.as_path()) {
         Ok(()) => (),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
-        Err(err) => Err(err).context("unable to create index db")?,
+        Err(err) => Err(err).context("unable to remove previous index db")?,
     }
 
-    std::fs::File::options()
-        .write(true)
-        .create(true)
-        .open(dbg!(opts.output.as_path()))
-        .unwrap();
+    let mut conn = rusqlite::Connection::open_with_flags(
+        opts.output,
+        OpenFlags::SQLITE_OPEN_CREATE
+            | OpenFlags::SQLITE_OPEN_READ_WRITE
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .context("unable to connect to index database")?;
 
-    let conn =
-        &mut sqlx::SqliteConnection::connect(format!("sqlite:{}", opts.output.display()).as_str())
-            .await
-            .context("unable to connect to index database")?;
+    conn.execute(
+        r#"
+CREATE TABLE packages (
+    attribute TEXT NOT NULL,
+    store_path TEXT NOT NULL,
+    name TEXT,
+    version TEXT,
+    description TEXT,
+    homepage TEXT,
+    long_description TEXT,
+    PRIMARY KEY (attribute)
+)
+        "#,
+        [],
+    )
+    .context("unable to create table in database")?;
 
-    conn.execute(sqlx::query_file_unchecked!("../queries/init.sql"))
-        .await
-        .context("unable to initialize database")?;
+    let mut create_row_query = conn
+        .prepare(
+            r#"
+INSERT INTO packages (attribute, store_path, name, version, description, homepage, long_description)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .context("unable to prepare INSERT query")?;
 
     for (attr, info) in registry.into_iter() {
         let store_path = match info.outputs.get("out") {
@@ -92,20 +110,16 @@ async fn main() -> eyre::Result<()> {
             .map(|meta| meta.long_description.clone())
             .flatten();
 
-        let create_row_query = sqlx::query_file_as!(
-            rippkgs_db::Package,
-            "../queries/add-package.sql",
-            attr,
-            store_path,
-            name,
-            version,
-            description,
-            None::<String>,
-            long_description,
-        );
-
-        conn.execute(create_row_query)
-            .await
+        create_row_query
+            .execute(rusqlite::params![
+                attr,
+                store_path,
+                name,
+                version,
+                description,
+                None::<String>,
+                long_description
+            ])
             .context("could not insert package into database")?;
     }
 
