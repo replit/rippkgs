@@ -1,9 +1,23 @@
-[workspace]
-resolver = "2"
-members = ["rippkgs", "rippkgs-index"]
+[package]
+name = "rippkgs"
+version = "0.1.0"
+edition = "2021"
 
-[workspace.dependencies]
-clap = "4.5.0"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "rippkgs-index"
+path = "src/bin/index/main.rs"
+
+[[bin]]
+name = "rippkgs"
+path = "src/bin/search/main.rs"
+
+[dependencies]
+clap = { version = "4.5.0", features = ["derive"] }
 eyre = "0.6.12"
-rusqlite = "0.30.0"
-serde = "1.0.196"
+fuzzy-matcher = "0.3.7"
+lazy_static = "1.4.0"
+rusqlite = { version = "0.30.0", features = ["functions"] }
+serde = { version = "1.0.196", features = ["derive"] }
+serde_json = "1.0.113"
