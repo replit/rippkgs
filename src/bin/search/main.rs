@@ -1,3 +1,4 @@
+use std::io::stdout;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -22,7 +23,7 @@ struct Opts {
     #[arg(default_value = "30")]
     num_results: u32,
 
-    #[arg(short, long)]
+    #[arg(short, long, default_value = "relevant")]
     sort: Sort,
 }
 
@@ -51,9 +52,9 @@ fn main() -> Result<()> {
     let mut query = conn
         .prepare(
             r#"
-SELECT *, fuzzy_score(name, ?1) as score
+SELECT *
 FROM packages
-ORDER BY score DESC
+ORDER BY fuzzy_score(name, ?1) DESC
 LIMIT ?2
             "#,
         )
@@ -65,6 +66,8 @@ LIMIT ?2
         .query(rusqlite::params![opts.query, opts.num_results])
         .context("unable to execute query")?;
 
+    let mut result_json_object = Vec::<serde_json::Value>::with_capacity(opts.num_results as _);
+
     loop {
         let row = results.next().context("error collecting query results")?;
 
@@ -73,21 +76,30 @@ LIMIT ?2
         };
 
         let attribute: String = row.get("attribute").context("error reading column")?;
-        // let store_path: String = row.get("store_path").context("error reading column")?;
-        // let name: String = row.get("name").context("error reading column")?;
-        // let version: String = row.get("version").context("error reading column")?;
-        // let description: String = row.get("description").context("error reading column")?;
-        // let homepage: String = row.get("homepage").context("error reading column")?;
-        // let long_description: String = row
-        //     .get("long_description")
-        //     .context("error reading column")?;
-        let score: i32 = row.get("score").context("error reading column")?;
+        let store_path: String = row.get("store_path").context("error reading column")?;
+        let name: Option<String> = row.get("name").context("error reading column")?;
+        let version: Option<String> = row.get("version").context("error reading column")?;
+        let description: Option<String> = row.get("description").context("error reading column")?;
+        let homepage: Option<String> = row.get("homepage").context("error reading column")?;
+        let long_description: Option<String> = row
+            .get("long_description")
+            .context("error reading column")?;
 
-        println!("({score}) {attribute}");
+        result_json_object.push(serde_json::json!({
+          "attribute": attribute,
+          "storePath": store_path,
+          "name": name,
+          "version": version,
+          "description": description,
+          "homepage": homepage,
+          "longDescription": long_description,
+        }));
     }
 
+    serde_json::to_writer(stdout(), &result_json_object).context("error printing result")?;
+
     let elapsed = start.elapsed();
-    println!("finished in {} ms", elapsed.as_millis());
+    eprintln!("finished in {} ms", elapsed.as_millis());
 
     Ok(())
 }
