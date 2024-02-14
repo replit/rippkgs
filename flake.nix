@@ -33,14 +33,6 @@
 
     perSystem = { config, lib, pkgs, rust-toolchain, self', system, ... }: {
       _module.args = {
-        # pkgs = import inputs.nixpkgs {
-        #   inherit system;
-
-          # overlays = [
-          #   inputs.fenix.overlays.default
-          # ];
-        # };
-
         rust-toolchain = inputs.fenix.packages.${system}.stable;
       };
 
@@ -50,6 +42,7 @@
       devshells.rippkgs = {
         packages = [
           rust-toolchain.toolchain
+          pkgs.jq
           pkgs.sqlite
         ];
       };
@@ -85,6 +78,12 @@
           inherit cargoArtifacts;
           pname = "rippkgs-index";
         });
+      };
+    };
+
+    flake = { lib, ... }: {
+      lib = import ./lib {
+        inherit lib;
       };
     };
   };
