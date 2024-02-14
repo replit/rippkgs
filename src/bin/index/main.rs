@@ -160,7 +160,7 @@ fn get_registry(
         let output = Command::new("nix-env")
             .args(args.iter())
             .output()
-            .expect("failed to get nixpkgs packages");
+            .with_context(|| format!("failed to get nixpkgs packages from {nixpkgs}"))?;
 
         println!("evaluated registry in {:.4} seconds", start.elapsed().as_secs_f64());
 
