@@ -19,7 +19,7 @@
               meta = val.meta or null;
               name = val.name or null;
               outputName = val.outputName or null;
-              outputs = lib.listToAttrs (builtins.map (out: { name = out; value = val.${out}.outPath; }) val.outputs);
+              outputs = lib.listToAttrs (builtins.map (out: { name = out; value = val.${out}.outPath; }) (val.outputs or []));
               pname = val.pname or null;
               system = val.system or null;
               version = val.version or null;
