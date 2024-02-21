@@ -146,7 +146,9 @@ fn get_registry(
             nixpkgs_var.as_str(),
             "-qa",
             "--meta",
-            "--out-path",
+            // TODO: get the out paths. unfortunately this can cause evaluation errors
+            // since attributes can be missing but still be valid...
+            // "--out-path",
         ];
 
         if let Some(config) = nixpkgs_config.as_ref() {
