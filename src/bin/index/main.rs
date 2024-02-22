@@ -91,7 +91,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
     let start = Instant::now();
 
     for (attr, info) in registry.into_iter() {
-        let store_path = match info.outputs.get("out") {
+        let store_path = match info.outputs.as_ref().map(|o| o.get("out")).flatten() {
             Some(out) => out.display().to_string(),
             None => continue,
         };
@@ -122,7 +122,10 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
             .context("could not insert package into database")?;
     }
 
-    println!("wrote index in {:.4} seconds", start.elapsed().as_secs_f64());
+    println!(
+        "wrote index in {:.4} seconds",
+        start.elapsed().as_secs_f64()
+    );
 
     Ok(())
 }
@@ -164,7 +167,10 @@ fn get_registry(
             .output()
             .with_context(|| format!("failed to get nixpkgs packages from {nixpkgs}"))?;
 
-        println!("evaluated registry in {:.4} seconds", start.elapsed().as_secs_f64());
+        println!(
+            "evaluated registry in {:.4} seconds",
+            start.elapsed().as_secs_f64()
+        );
 
         if !output.status.success() {
             panic!(
@@ -198,7 +204,10 @@ fn get_registry(
 
     let start = Instant::now();
     let res = serde_json::from_reader(registry_reader).context("unable to read registry JSON");
-    println!("parsed registry in {:.4} seconds", start.elapsed().as_secs_f64());
+    println!(
+        "parsed registry in {:.4} seconds",
+        start.elapsed().as_secs_f64()
+    );
 
     res
 }
