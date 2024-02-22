@@ -5,7 +5,7 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 pub struct PackageInfo {
     #[serde(default)]
-    pub outputs: PackageOutputs,
+    pub outputs: Option<PackageOutputs>,
     pub pname: Option<String>,
     pub version: Option<String>,
     pub meta: Option<PackageMeta>,
