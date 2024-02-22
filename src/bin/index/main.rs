@@ -66,7 +66,6 @@ fn main() -> Result<()> {
         r#"
 CREATE TABLE packages (
     attribute TEXT NOT NULL,
-    store_path TEXT NOT NULL,
     name TEXT,
     version TEXT,
     description TEXT,
@@ -82,8 +81,8 @@ CREATE TABLE packages (
     let mut create_row_query = conn
         .prepare(
             r#"
-INSERT INTO packages (attribute, store_path, name, version, description, homepage, long_description)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO packages (attribute, name, version, description, homepage, long_description)
+VALUES (?, ?, ?, ?, ?, ?)
             "#,
         )
         .context("unable to prepare INSERT query")?;
@@ -91,11 +90,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
     let start = Instant::now();
 
     for (attr, info) in registry.into_iter() {
-        let store_path = match info.outputs.as_ref().map(|o| o.get("out")).flatten() {
-            Some(out) => out.display().to_string(),
-            None => continue,
-        };
-
         let name = info.pname.as_ref().unwrap_or(&attr).as_str();
         let version = info.version.as_ref().unwrap().as_str();
         let description = info
@@ -112,7 +106,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
         create_row_query
             .execute(rusqlite::params![
                 attr,
-                store_path,
                 name,
                 version,
                 description,

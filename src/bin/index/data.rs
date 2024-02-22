@@ -1,17 +1,11 @@
-use std::path::PathBuf;
-
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct PackageInfo {
-    #[serde(default)]
-    pub outputs: Option<PackageOutputs>,
     pub pname: Option<String>,
     pub version: Option<String>,
     pub meta: Option<PackageMeta>,
 }
-
-pub type PackageOutputs = std::collections::HashMap<String, PathBuf>;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

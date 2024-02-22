@@ -76,7 +76,7 @@ LIMIT ?2
         };
 
         let attribute: String = row.get("attribute").context("error reading column")?;
-        let store_path: String = row.get("store_path").context("error reading column")?;
+        // let store_path: String = row.get("store_path").context("error reading column")?;
         let name: Option<String> = row.get("name").context("error reading column")?;
         let version: Option<String> = row.get("version").context("error reading column")?;
         let description: Option<String> = row.get("description").context("error reading column")?;
@@ -87,7 +87,7 @@ LIMIT ?2
 
         result_json_object.push(serde_json::json!({
           "attribute": attribute,
-          "storePath": store_path,
+          // "storePath": store_path,
           "name": name,
           "version": version,
           "description": description,
