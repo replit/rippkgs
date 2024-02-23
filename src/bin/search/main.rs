@@ -1,5 +1,7 @@
 mod data;
+mod exact;
 mod fuzzy;
+
 use std::io::stdout;
 use std::path::PathBuf;
 
@@ -22,6 +24,10 @@ struct Opts {
 
     #[arg(short, long, default_value = "relevant")]
     sort: Sort,
+
+    /// Whether to return information about an exact attribute.
+    #[arg(long)]
+    exact: bool,
 }
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -38,8 +44,15 @@ fn main() -> Result<()> {
     )
     .context("unable to read index")?;
 
-    let results = fuzzy::search(opts.query.as_str(), &conn, opts.num_results)
-        .context("error getting results")?;
+    let results = if opts.exact {
+        let result =
+            exact::search(opts.query.as_str(), &conn).context("error searching for exact query")?;
+        serde_json::to_value(result).context("error serializing exact result")?
+    } else {
+        let results = fuzzy::search(opts.query.as_str(), &conn, opts.num_results)
+            .context("error searching for fuzzy query")?;
+        serde_json::to_value(results).context("error serializing fuzzy results")?
+    };
 
     serde_json::to_writer(stdout(), &results).context("error printing results")?;
 
