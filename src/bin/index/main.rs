@@ -91,7 +91,7 @@ VALUES (?, ?, ?, ?, ?, ?)
 
     for (attr, info) in registry.into_iter() {
         let name = info.pname.as_ref().unwrap_or(&attr).as_str();
-        let version = info.version.as_ref().unwrap().as_str();
+        let version = info.version.as_ref();
         let description = info
             .meta
             .as_ref()

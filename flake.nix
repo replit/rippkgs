@@ -93,5 +93,9 @@
             });
         };
       };
+
+      flake = args: {
+        lib = import ./lib args;
+      };
     };
 }
