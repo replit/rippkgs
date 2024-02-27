@@ -20,65 +20,78 @@
     flake-parts.url = "github:hercules-ci/flake-parts";
   };
 
-  outputs = inputs: inputs.flake-parts.lib.mkFlake {inherit inputs;} {
-    imports = [
-      inputs.devshell.flakeModule
-      inputs.flake-parts.flakeModules.easyOverlay
-    ];
+  outputs = inputs:
+    inputs.flake-parts.lib.mkFlake {inherit inputs;} {
+      imports = [
+        inputs.devshell.flakeModule
+        inputs.flake-parts.flakeModules.easyOverlay
+      ];
 
-    systems = [
-      "aarch64-darwin"
-      "x86_64-linux"
-    ];
+      systems = [
+        "aarch64-darwin"
+        "x86_64-linux"
+      ];
 
-    perSystem = { config, lib, pkgs, rust-toolchain, self', system, ... }: {
-      _module.args = {
-        rust-toolchain = inputs.fenix.packages.${system}.stable;
-      };
+      perSystem = {
+        config,
+        lib,
+        pkgs,
+        rust-toolchain,
+        self',
+        system,
+        ...
+      }: {
+        _module.args = {
+          rust-toolchain = inputs.fenix.packages.${system}.stable;
+        };
 
-      formatter = pkgs.alejandra;
+        formatter = pkgs.alejandra;
 
-      devShells.default = self'.devShells.rippkgs;
-      devshells.rippkgs = {
-        packages = [
-          rust-toolchain.toolchain
-          pkgs.jq
-          pkgs.sqlite
-        ];
-      };
-
-      overlayAttrs = {
-        inherit (config.packages) rippkgs rippkgs-index;
-      };
-
-      packages = let
-        craneLib = inputs.crane.lib.${system}.overrideToolchain rust-toolchain.toolchain;
-
-        common-args = {
-          src = craneLib.cleanCargoSource (craneLib.path ./.);
-          strict-deps = true;
-
-          buildInputs = [
+        devShells.default = self'.devShells.rippkgs;
+        devshells.rippkgs = {
+          packages = [
+            rust-toolchain.toolchain
+            pkgs.jq
             pkgs.sqlite
-          ] ++ lib.optionals pkgs.stdenv.isDarwin [
-            pkgs.libiconv
           ];
         };
 
-        cargoArtifacts = craneLib.buildDepsOnly common-args;
-      in {
-        default = self'.packages.rippkgs;
+        overlayAttrs = {
+          inherit (config.packages) rippkgs rippkgs-index;
+        };
 
-        rippkgs = craneLib.buildPackage (common-args // {
-          inherit cargoArtifacts;
-          pname = "rippkgs";
-        });
+        packages = let
+          craneLib = inputs.crane.lib.${system}.overrideToolchain rust-toolchain.toolchain;
 
-        rippkgs-index = craneLib.buildPackage (common-args // {
-          inherit cargoArtifacts;
-          pname = "rippkgs-index";
-        });
+          common-args = {
+            src = craneLib.cleanCargoSource (craneLib.path ./.);
+            strict-deps = true;
+
+            buildInputs =
+              [
+                pkgs.sqlite
+              ]
+              ++ lib.optionals pkgs.stdenv.isDarwin [
+                pkgs.libiconv
+              ];
+          };
+
+          cargoArtifacts = craneLib.buildDepsOnly common-args;
+        in {
+          default = self'.packages.rippkgs;
+
+          rippkgs = craneLib.buildPackage (common-args
+            // {
+              inherit cargoArtifacts;
+              pname = "rippkgs";
+            });
+
+          rippkgs-index = craneLib.buildPackage (common-args
+            // {
+              inherit cargoArtifacts;
+              pname = "rippkgs-index";
+            });
+        };
       };
     };
-  };
 }
