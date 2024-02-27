@@ -18,8 +18,8 @@ pub fn search(query_str: &str, db: &Connection) -> eyre::Result<Option<Package>>
     eprintln!("got results in {} ms", elapsed.as_millis());
 
     match result {
-      Ok(res) => Ok(Some(res)),
-      Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-      Err(err) => Err(err).context("unable to execute query"),
+        Ok(res) => Ok(Some(res)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(err) => Err(err).context("unable to execute query"),
     }
 }

@@ -31,8 +31,13 @@ LIMIT ?2
     let start = Instant::now();
 
     let res = query
-        .query_map(rusqlite::params![query_str, num_results], |r| Package::try_from(r))
-        .map(|res| res.collect::<Result<Vec<_>, _>>().context("error parsing results"))
+        .query_map(rusqlite::params![query_str, num_results], |r| {
+            Package::try_from(r)
+        })
+        .map(|res| {
+            res.collect::<Result<Vec<_>, _>>()
+                .context("error parsing results")
+        })
         .context("unable to execute query")?;
 
     let elapsed = start.elapsed();
