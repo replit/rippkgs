@@ -1,7 +1,7 @@
 {lib, ...}: let
 in {
   genRegistry = pkgs: let
-    inherit (builtins) currentSystem deepSeq listToAttrs map parseDrvName seq tryEval;
+    inherit (builtins) deepSeq listToAttrs map parseDrvName seq tryEval;
     inherit (lib) filterAttrs flatten foldl isDerivation mapAttrsToList optional optionals traceVal;
 
     registerPackage = name: value: let
@@ -20,7 +20,7 @@ in {
         };
       };
 
-      platformForAvailability = {system = pkgs.system or currentSystem;};
+      platformForAvailability = {system = pkgs.system or builtins.currentSystem;};
       isAvailableOn = tryEval (lib.meta.availableOn platformForAvailability safeValue.value);
       available = safeValue.success && isDerivation value && isAvailableOn.success && isAvailableOn.value;
 
