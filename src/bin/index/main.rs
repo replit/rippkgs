@@ -68,6 +68,7 @@ CREATE TABLE packages (
     attribute TEXT NOT NULL,
     name TEXT,
     version TEXT,
+    outPath TEXT,
     description TEXT,
     homepage TEXT,
     long_description TEXT,
@@ -81,8 +82,8 @@ CREATE TABLE packages (
     let mut create_row_query = conn
         .prepare(
             r#"
-INSERT INTO packages (attribute, name, version, description, homepage, long_description)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO packages (attribute, name, version, outPath, description, homepage, long_description)
+VALUES (?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .context("unable to prepare INSERT query")?;
@@ -92,6 +93,10 @@ VALUES (?, ?, ?, ?, ?, ?)
     for (attr, info) in registry.into_iter() {
         let name = info.pname.as_ref().unwrap_or(&attr).as_str();
         let version = info.version.as_ref();
+        let out_path = info
+            .outputs
+            .map(|outs| outs.get("out").map(String::to_owned))
+            .flatten();
         let description = info
             .meta
             .as_ref()
@@ -108,6 +113,7 @@ VALUES (?, ?, ?, ?, ?, ?)
                 attr,
                 name,
                 version,
+                out_path,
                 description,
                 None::<String>,
                 long_description
