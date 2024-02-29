@@ -94,7 +94,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
         let name = info.pname.as_ref().unwrap_or(&attr).as_str();
         let version = info.version.as_ref();
         let out_path = info
-            .outputs
+            .store_paths
             .map(|outs| outs.get("out").map(String::to_owned))
             .flatten();
         let description = info

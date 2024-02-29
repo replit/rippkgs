@@ -2,12 +2,13 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PackageInfo {
     pub pname: Option<String>,
     pub version: Option<String>,
     pub meta: Option<PackageMeta>,
-    pub outputs: Option<HashMap<String, String>>,
+    pub store_paths: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,6 +50,17 @@ mod tests {
         assert_matches!(
             serde_json::from_str::<super::OneOrList<String>>(r#""hi""#),
             Ok(super::OneOrList::One(_))
+        );
+    }
+
+    #[test]
+    fn store_paths() {
+        assert_matches!(
+            serde_json::from_str::<super::PackageInfo>(r#"{"storePaths": {"out": "hi"}}"#),
+            Ok(super::PackageInfo {
+                store_paths: Some(store_paths),
+                ..
+            }) if store_paths.len() == 1 && store_paths["out"] == "hi"
         );
     }
 }
