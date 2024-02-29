@@ -2,7 +2,7 @@
 in {
   genRegistry = platform: pkgs: let
     inherit (builtins) deepSeq filter listToAttrs map parseDrvName seq tryEval;
-    inherit (lib) filterAttrs flatten foldl isDerivation mapAttrsToList optional optionals traceVal;
+    inherit (lib) filterAttrs flatten foldl isDerivation mapAttrsToList optional optionals removePrefix traceVal;
 
     registerPackage = name: value: let
       safeValue = tryEval value;
@@ -12,10 +12,10 @@ in {
       registryValue = {
         pname = safeVal.pname or (parseDrvName safeVal.name).name or null;
         version = safeVal.version or null;
-        outputs = let
+        storePaths = let
           outputs-list = map (out: {
             name = out;
-            value = safeVal.${out}.outPath;
+            value = removePrefix "/nix/store/" safeVal.${out}.outPath;
           }) (safeVal.outputs or []);
           relevant-outputs = filter ({name, ...}: name == "out") outputs-list;
         in
