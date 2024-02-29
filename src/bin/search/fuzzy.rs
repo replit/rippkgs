@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::time::Instant;
 
 use eyre::Context;
@@ -8,7 +9,12 @@ use rusqlite::{functions::FunctionFlags, Connection};
 
 use crate::data::Package;
 
-pub fn search(query_str: &str, db: &Connection, num_results: u32) -> eyre::Result<Vec<Package>> {
+pub fn search(
+    query_str: &str,
+    db: &Connection,
+    num_results: u32,
+    filter_built: bool,
+) -> eyre::Result<Vec<Package>> {
     db.create_scalar_function(
         "fuzzy_score",
         2,
@@ -23,7 +29,6 @@ pub fn search(query_str: &str, db: &Connection, num_results: u32) -> eyre::Resul
 SELECT *
 FROM packages
 ORDER BY fuzzy_score(name, ?1) DESC
-LIMIT ?2
             "#,
         )
         .context("unable to prepare search query")?;
@@ -31,12 +36,32 @@ LIMIT ?2
     let start = Instant::now();
 
     let res = query
-        .query_map(rusqlite::params![query_str, num_results], |r| {
-            Package::try_from(r)
-        })
+        .query_map(rusqlite::params![query_str], |r| Package::try_from(r))
         .map(|res| {
-            res.collect::<Result<Vec<_>, _>>()
-                .context("error parsing results")
+            res.filter(|package_res| {
+                let Ok(package) = package_res else {
+                    // carry on the error
+                    return true;
+                };
+
+                let Some(store_path) = package.store_path.as_ref() else {
+                    // only None when the package is stdenv (not installable) or part of
+                    // bootstrapping (should use other attrs). We always filter these out because
+                    // they're almost always irrelevant.
+                    return false;
+                };
+
+                if !filter_built {
+                    // we don't care about filtering out results based on presence of the store
+                    // path.
+                    return true;
+                }
+
+                PathBuf::from("/nix/store/").join(store_path).exists()
+            })
+            .take(num_results as _)
+            .collect::<Result<Vec<_>, _>>()
+            .context("error parsing results")
         })
         .context("unable to execute query")?;
 

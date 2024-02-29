@@ -12,13 +12,13 @@ use rusqlite::OpenFlags;
 
 #[derive(Debug, Parser)]
 struct Opts {
-    /// The location of the nixpkgs index to use
+    /// The location of the nixpkgs index to use.
     #[arg(short, long)]
     index: PathBuf,
 
     query: String,
 
-    /// The number of results to return
+    /// The number of results to return.
     #[arg(default_value = "30")]
     num_results: u32,
 
@@ -28,6 +28,11 @@ struct Opts {
     /// Whether to return information about an exact attribute.
     #[arg(long)]
     exact: bool,
+
+    /// Filter results by whether the /nix/store path already exists. Only applies when doing fuzzy
+    /// matching.
+    #[arg(long)]
+    filter_built: bool,
 }
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -49,8 +54,13 @@ fn main() -> Result<()> {
             exact::search(opts.query.as_str(), &conn).context("error searching for exact query")?;
         serde_json::to_value(result).context("error serializing exact result")?
     } else {
-        let results = fuzzy::search(opts.query.as_str(), &conn, opts.num_results)
-            .context("error searching for fuzzy query")?;
+        let results = fuzzy::search(
+            opts.query.as_str(),
+            &conn,
+            opts.num_results,
+            opts.filter_built,
+        )
+        .context("error searching for fuzzy query")?;
         serde_json::to_value(results).context("error serializing fuzzy results")?
     };
 
