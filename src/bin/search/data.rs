@@ -8,6 +8,7 @@ pub struct Package {
     pub description: Option<String>,
     pub homepage: Option<String>,
     pub long_description: Option<String>,
+    pub store_path: Option<String>,
 }
 
 impl<'r, 'd> TryFrom<&'r rusqlite::Row<'d>> for Package {
@@ -15,7 +16,7 @@ impl<'r, 'd> TryFrom<&'r rusqlite::Row<'d>> for Package {
 
     fn try_from(row: &'r rusqlite::Row<'d>) -> Result<Self, Self::Error> {
         let attribute: String = row.get("attribute")?;
-        // let store_path: String = row.get("store_path")?;
+        let store_path: Option<String> = row.get("outPath")?;
         let name: Option<String> = row.get("name")?;
         let version: Option<String> = row.get("version")?;
         let description: Option<String> = row.get("description")?;
@@ -29,6 +30,7 @@ impl<'r, 'd> TryFrom<&'r rusqlite::Row<'d>> for Package {
             description,
             homepage,
             long_description,
+            store_path,
         })
     }
 }
