@@ -1,22 +1,31 @@
 {lib, ...}: let
 in {
   genRegistry = platform: pkgs: let
-    inherit (builtins) deepSeq listToAttrs map parseDrvName seq tryEval;
+    inherit (builtins) deepSeq filter listToAttrs map parseDrvName seq tryEval;
     inherit (lib) filterAttrs flatten foldl isDerivation mapAttrsToList optional optionals traceVal;
 
     registerPackage = name: value: let
       safeValue = tryEval value;
+      safeVal = safeValue.value;
 
       safeRegistryValue = tryEval (deepSeq registryValue registryValue);
       registryValue = {
-        pname = value.pname or (parseDrvName value.name).name or null;
-        version = value.version or null;
+        pname = safeVal.pname or (parseDrvName safeVal.name).name or null;
+        version = safeVal.version or null;
+        outputs = let
+          outputs-list = map (out: {
+            name = out;
+            value = safeVal.${out}.outPath;
+          }) (safeVal.outputs or []);
+          relevant-outputs = filter ({name, ...}: name == "out") outputs-list;
+        in
+          listToAttrs relevant-outputs;
 
         meta = {
-          description = value.meta.description or null;
-          homepage = value.meta.homepage or null;
-          license = value.meta.license or null;
-          longDescription = value.meta.longDescription or null;
+          description = safeVal.meta.description or null;
+          homepage = safeVal.meta.homepage or null;
+          license = safeVal.meta.license or null;
+          longDescription = safeVal.meta.longDescription or null;
         };
       };
 

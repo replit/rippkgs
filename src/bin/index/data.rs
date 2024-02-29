@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -5,6 +7,7 @@ pub struct PackageInfo {
     pub pname: Option<String>,
     pub version: Option<String>,
     pub meta: Option<PackageMeta>,
+    pub outputs: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize)]
