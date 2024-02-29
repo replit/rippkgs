@@ -13,10 +13,14 @@ in {
         pname = safeVal.pname or (parseDrvName safeVal.name).name or null;
         version = safeVal.version or null;
         storePaths = let
-          outputs-list = map (out: {
+          getOutput = out: {
             name = out;
-            value = removePrefix "/nix/store/" safeVal.${out}.outPath;
-          }) (safeVal.outputs or []);
+            value = let
+              outPath = tryEval safeVal.${out}.outPath;
+            in if outPath.success then removePrefix "/nix/store/" outPath.value else "<broken>";
+          };
+
+          outputs-list = map getOutput (safeVal.outputs or []);
           relevant-outputs = filter ({name, ...}: name == "out") outputs-list;
         in
           listToAttrs relevant-outputs;
