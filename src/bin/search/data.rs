@@ -9,6 +9,7 @@ pub struct Package {
     pub homepage: Option<String>,
     pub long_description: Option<String>,
     pub store_path: Option<String>,
+    pub score: Option<f64>,
 }
 
 impl<'r, 'd> TryFrom<&'r rusqlite::Row<'d>> for Package {
@@ -22,6 +23,7 @@ impl<'r, 'd> TryFrom<&'r rusqlite::Row<'d>> for Package {
         let description: Option<String> = row.get("description")?;
         let homepage: Option<String> = row.get("homepage")?;
         let long_description: Option<String> = row.get("long_description")?;
+        let score: Option<f64> = row.get("score").unwrap_or(None);
 
         Ok(Package {
             attribute,
@@ -31,6 +33,7 @@ impl<'r, 'd> TryFrom<&'r rusqlite::Row<'d>> for Package {
             homepage,
             long_description,
             store_path,
+            score,
         })
     }
 }
