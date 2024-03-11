@@ -2,19 +2,53 @@ mod data;
 mod exact;
 mod fuzzy;
 
+use std::fmt::Display;
 use std::io::stdout;
 use std::path::PathBuf;
 
+use clap::builder::{PathBufValueParser, TypedValueParser};
 use clap::{Parser, ValueEnum};
 use eyre::Context;
 use eyre::Result;
 use rusqlite::OpenFlags;
+use xdg::BaseDirectories;
+
+#[derive(Clone, Debug)]
+struct IndexPath(PathBuf);
+
+impl AsRef<PathBuf> for IndexPath {
+    fn as_ref(&self) -> &PathBuf {
+        &self.0
+    }
+}
+
+impl Display for IndexPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.display().fmt(f)
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct IndexPathValueParser(PathBufValueParser);
+
+impl TypedValueParser for IndexPathValueParser {
+    type Value = IndexPath;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        arg: Option<&clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> std::prelude::v1::Result<Self::Value, clap::Error> {
+        self.0.parse_ref(cmd, arg, value).map(IndexPath)
+    }
+}
 
 #[derive(Debug, Parser)]
 struct Opts {
     /// The location of the nixpkgs index to use.
-    #[arg(short, long)]
-    index: PathBuf,
+    #[arg(short, long, default_value_t = get_default_index_path(), value_parser = IndexPathValueParser::default())]
+    index: IndexPath,
 
     query: String,
 
@@ -35,6 +69,14 @@ struct Opts {
     filter_built: bool,
 }
 
+fn get_default_index_path() -> IndexPath {
+    let dirs = BaseDirectories::new()
+        .context("rippkgs isn't supported on Windows.")
+        .unwrap();
+
+    IndexPath(dirs.get_data_home().join("rippkgs-index.sqlite"))
+}
+
 #[derive(Clone, Debug, ValueEnum)]
 enum Sort {
     Relevant,
@@ -44,7 +86,7 @@ fn main() -> Result<()> {
     let opts = Opts::parse();
 
     let conn = rusqlite::Connection::open_with_flags(
-        opts.index,
+        opts.index.0,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
     .context("unable to read index")?;
