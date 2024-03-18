@@ -3,7 +3,7 @@ use std::time::Instant;
 use eyre::Context;
 use rusqlite::Connection;
 
-use crate::data::Package;
+use rippkgs::Package;
 
 pub fn search(query_str: &str, db: &Connection) -> eyre::Result<Option<Package>> {
     let start = Instant::now();

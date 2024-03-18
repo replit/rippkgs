@@ -12,6 +12,7 @@ use std::{
 use clap::Parser;
 use data::PackageInfo;
 use eyre::{Context, Result};
+use rippkgs::Package;
 use rusqlite::OpenFlags;
 
 #[derive(Debug, Parser)]
@@ -54,7 +55,7 @@ fn main() -> Result<()> {
         Err(err) => Err(err).context("unable to remove previous index db")?,
     }
 
-    let conn = rusqlite::Connection::open_with_flags(
+    let mut conn = rusqlite::Connection::open_with_flags(
         opts.output,
         OpenFlags::SQLITE_OPEN_CREATE
             | OpenFlags::SQLITE_OPEN_READ_WRITE
@@ -62,64 +63,50 @@ fn main() -> Result<()> {
     )
     .context("unable to connect to index database")?;
 
-    conn.execute(
-        r#"
-CREATE TABLE packages (
-    attribute TEXT NOT NULL,
-    name TEXT,
-    version TEXT,
-    outPath TEXT,
-    description TEXT,
-    homepage TEXT,
-    long_description TEXT,
-    PRIMARY KEY (attribute)
-)
-        "#,
-        [],
-    )
-    .context("unable to create table in database")?;
-
-    let mut create_row_query = conn
-        .prepare(
-            r#"
-INSERT INTO packages (attribute, name, version, outPath, description, homepage, long_description)
-VALUES (?, ?, ?, ?, ?, ?, ?)
-            "#,
-        )
-        .context("unable to prepare INSERT query")?;
+    conn.execute(Package::create_table(), [])
+        .context("unable to create table in database")?;
 
     let start = Instant::now();
+    let tx = conn.transaction().context("starting transaction")?;
 
-    for (attr, info) in registry.into_iter() {
-        let name = info.pname.as_ref().unwrap_or(&attr).as_str();
-        let version = info.version.as_ref();
-        let out_path = info
-            .store_paths
-            .map(|outs| outs.get("out").map(String::to_owned))
-            .flatten();
-        let description = info
-            .meta
-            .as_ref()
-            .map(|meta| meta.description.clone())
-            .flatten();
-        let long_description = info
-            .meta
-            .as_ref()
-            .map(|meta| meta.long_description.clone())
-            .flatten();
+    {
+        let mut create_row_query = tx
+            .prepare(
+                r#"
+INSERT INTO packages (attribute, name, version, storePath, description, long_description)
+VALUES (?, ?, ?, ?, ?, ?)
+            "#,
+            )
+            .context("unable to prepare INSERT query")?;
 
-        create_row_query
-            .execute(rusqlite::params![
-                attr,
-                name,
-                version,
-                out_path,
-                description,
-                None::<String>,
-                long_description
-            ])
-            .context("could not insert package into database")?;
+        registry
+            .into_iter()
+            .map(|(attr, info)| info.into_rippkgs_package(attr))
+            .try_for_each(
+                |Package {
+                     attribute,
+                     name,
+                     version,
+                     store_path,
+                     description,
+                     long_description,
+                 }| {
+                    create_row_query
+                        .execute(rusqlite::params![
+                            attribute,
+                            name,
+                            version,
+                            store_path,
+                            description,
+                            long_description
+                        ])
+                        .context("could not insert package into database")
+                        .map(|_| ())
+                },
+            )?;
     }
+
+    tx.commit().context("committing database")?;
 
     println!(
         "wrote index in {:.4} seconds",

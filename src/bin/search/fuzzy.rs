@@ -7,7 +7,7 @@ use fuzzy_matcher::FuzzyMatcher;
 use rusqlite::functions::Context as FunctionContext;
 use rusqlite::{functions::FunctionFlags, Connection};
 
-use crate::data::Package;
+use rippkgs::Package;
 
 pub fn search(
     query_str: &str,
