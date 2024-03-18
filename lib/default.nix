@@ -1,6 +1,6 @@
 {lib, ...}: let
 in {
-  genRegistry = platform: pkgs: let
+  genRegistry = pkgs: let
     inherit (builtins) deepSeq filter listToAttrs map parseDrvName seq tryEval;
     inherit (lib) filterAttrs flatten foldl isDerivation mapAttrsToList optional optionals removePrefix traceVal;
 
@@ -33,7 +33,7 @@ in {
         };
       };
 
-      platformForAvailability = {system = platform;};
+      platformForAvailability = {system = pkgs.system or builtins.currentSystem;};
       isAvailableOn = tryEval (lib.meta.availableOn platformForAvailability safeValue.value);
       available = safeValue.success && isDerivation value && isAvailableOn.success && isAvailableOn.value;
 
