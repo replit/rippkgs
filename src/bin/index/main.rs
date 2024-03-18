@@ -4,7 +4,7 @@ use std::{
     collections::{HashMap, VecDeque},
     fs::File,
     io::{self, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
     time::Instant,
 };
@@ -41,7 +41,7 @@ struct Opts {
     ///
     /// Only used if `--nixpkgs` is provided.
     #[arg(short = 'c', long)]
-    nixpkgs_config: Option<String>,
+    nixpkgs_config: Option<Box<Path>>,
 }
 
 fn main() -> Result<()> {
@@ -125,30 +125,36 @@ fn get_registry(
     }: &Opts,
 ) -> eyre::Result<HashMap<String, PackageInfo>> {
     let registry_reader: Box<dyn io::Read> = if let Some(nixpkgs) = nixpkgs {
-        let nixpkgs_var = format!("nixpkgs={}", nixpkgs);
+        let nixpkgs_include_arg = format!("nixpkgs={nixpkgs}");
+        let nixpkgs_config = nixpkgs_config
+            .as_ref()
+            .map(|config| config.display().to_string())
+            .unwrap_or("{}".to_string());
+        let apply_arg = format!(
+            r#"
+genRegistry:
 
-        let mut args = vec![
+let pkgs = import <nixpkgs> {{ config = {nixpkgs_config}; }};
+    genRegistry' = genRegistry pkgs;
+in genRegistry' pkgs
+            "#
+        );
+
+        let args = vec![
+            "eval",
+            "--impure",
             "--json",
-            "-f",
-            "<nixpkgs>",
             "-I",
-            nixpkgs_var.as_str(),
-            "-qa",
-            "--meta",
-            // TODO: get the out paths. unfortunately this can cause evaluation errors
-            // since attributes can be missing but still be valid...
-            // "--out-path",
+            nixpkgs_include_arg.as_str(),
+            "--expr",
+            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lib/genRegistry.nix")),
+            "--apply",
+            apply_arg.as_str(),
         ];
-
-        if let Some(config) = nixpkgs_config.as_ref() {
-            args.push("--arg");
-            args.push("config");
-            args.push(config.as_str());
-        }
 
         let start = Instant::now();
 
-        let output = Command::new("nix-env")
+        let output = Command::new("nix")
             .args(args.iter())
             .output()
             .with_context(|| format!("getting nixpkgs packages from {nixpkgs}"))?;
@@ -160,7 +166,7 @@ fn get_registry(
 
         if !output.status.success() {
             panic!(
-                "nix-env failed: {}",
+                "`nix eval` failed: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
         }

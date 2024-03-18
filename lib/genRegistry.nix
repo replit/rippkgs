@@ -1,6 +1,4 @@
-{lib, ...}: let
-in {
-  genRegistry = pkgs: let
+{lib, ...}: pkgs: let
     inherit (builtins) deepSeq filter listToAttrs map parseDrvName seq tryEval;
     inherit (lib) filterAttrs flatten foldl isDerivation mapAttrsToList optional optionals removePrefix traceVal;
 
@@ -95,7 +93,4 @@ in {
     scoped-registries = flatten (mapAttrsToList registerScope pkgs);
     registry = listToAttrs (registry-items ++ scoped-registries);
   in
-    registry;
-args: {
-  genRegistry = import ./genRegistry.nix args;
-}
+    registry
