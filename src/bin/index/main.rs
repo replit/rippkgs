@@ -47,12 +47,12 @@ struct Opts {
 fn main() -> Result<()> {
     let opts = Opts::parse();
 
-    let registry = get_registry(&opts).context("unable to get nixpkgs registry")?;
+    let registry = get_registry(&opts).context("getting nixpkgs registry")?;
 
     match std::fs::remove_file(opts.output.as_path()) {
         Ok(()) => (),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
-        Err(err) => Err(err).context("unable to remove previous index db")?,
+        Err(err) => Err(err).context("removing previous index db")?,
     }
 
     let mut conn = rusqlite::Connection::open_with_flags(
@@ -61,10 +61,10 @@ fn main() -> Result<()> {
             | OpenFlags::SQLITE_OPEN_READ_WRITE
             | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
-    .context("unable to connect to index database")?;
+    .context("connecting to index database")?;
 
     conn.execute(Package::create_table(), [])
-        .context("unable to create table in database")?;
+        .context("creating table in database")?;
 
     let start = Instant::now();
     let tx = conn.transaction().context("starting transaction")?;
@@ -77,7 +77,7 @@ INSERT INTO packages (attribute, name, version, storePath, description, long_des
 VALUES (?, ?, ?, ?, ?, ?)
             "#,
             )
-            .context("unable to prepare INSERT query")?;
+            .context("preparing INSERT query")?;
 
         registry
             .into_iter()
@@ -100,7 +100,7 @@ VALUES (?, ?, ?, ?, ?, ?)
                             description,
                             long_description
                         ])
-                        .context("could not insert package into database")
+                        .context("inserting package into database")
                         .map(|_| ())
                 },
             )?;
@@ -151,7 +151,7 @@ fn get_registry(
         let output = Command::new("nix-env")
             .args(args.iter())
             .output()
-            .with_context(|| format!("failed to get nixpkgs packages from {nixpkgs}"))?;
+            .with_context(|| format!("getting nixpkgs packages from {nixpkgs}"))?;
 
         println!(
             "evaluated registry in {:.4} seconds",
@@ -171,9 +171,9 @@ fn get_registry(
                 .truncate(true)
                 .create(true)
                 .open(registry)
-                .context("couldn't open registry file")?
+                .context("opening registry file")?
                 .write(&output.stdout)
-                .context("couldn't write registry file")?;
+                .context("writing registry file")?;
         }
 
         Box::new(VecDeque::from(output.stdout))
@@ -181,7 +181,7 @@ fn get_registry(
         let f = File::options()
             .read(true)
             .open(registry)
-            .context("couldn't open registry file")?;
+            .context("opening registry file")?;
 
         Box::new(f)
     } else {
@@ -189,7 +189,7 @@ fn get_registry(
     };
 
     let start = Instant::now();
-    let res = serde_json::from_reader(registry_reader).context("unable to read registry JSON");
+    let res = serde_json::from_reader(registry_reader).context("reading registry JSON");
     println!(
         "parsed registry in {:.4} seconds",
         start.elapsed().as_secs_f64()

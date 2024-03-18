@@ -20,6 +20,6 @@ pub fn search(query_str: &str, db: &Connection) -> eyre::Result<Option<Package>>
     match result {
         Ok(res) => Ok(Some(res)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(err) => Err(err).context("unable to execute query"),
+        Err(err) => Err(err).context("executing query"),
     }
 }

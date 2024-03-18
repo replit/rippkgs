@@ -89,12 +89,12 @@ fn main() -> Result<()> {
         opts.index.0,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
-    .context("unable to read index")?;
+    .context("reading index")?;
 
     let results = if opts.exact {
         let result =
-            exact::search(opts.query.as_str(), &conn).context("error searching for exact query")?;
-        serde_json::to_value(result).context("error serializing exact result")?
+            exact::search(opts.query.as_str(), &conn).context("searching for exact query")?;
+        serde_json::to_value(result).context("serializing exact result")?
     } else {
         let results = fuzzy::search(
             opts.query.as_str(),
@@ -102,11 +102,11 @@ fn main() -> Result<()> {
             opts.num_results,
             opts.filter_built,
         )
-        .context("error searching for fuzzy query")?;
-        serde_json::to_value(results).context("error serializing fuzzy results")?
+        .context("searching for fuzzy query")?;
+        serde_json::to_value(results).context("serializing fuzzy results")?
     };
 
-    serde_json::to_writer(stdout(), &results).context("error printing results")?;
+    serde_json::to_writer(stdout(), &results).context("printing results")?;
 
     Ok(())
 }
