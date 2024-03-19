@@ -7,12 +7,13 @@ use std::io::stdout;
 use std::path::PathBuf;
 
 use clap::builder::{PathBufValueParser, TypedValueParser};
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use eyre::Context;
 use eyre::Result;
 use rusqlite::OpenFlags;
 use xdg::BaseDirectories;
 
+/// Custom type because clap needs to use Display to print the default value.
 #[derive(Clone, Debug)]
 struct IndexPath(PathBuf);
 
@@ -46,18 +47,13 @@ impl TypedValueParser for IndexPathValueParser {
 
 #[derive(Debug, Parser)]
 struct Opts {
-    /// The location of the nixpkgs index to use.
+    /// The location of the rippkgs index to use.
     #[arg(short, long, default_value_t = get_default_index_path(), value_parser = IndexPathValueParser::default())]
     index: IndexPath,
 
-    query: String,
-
     /// The number of results to return.
-    #[arg(default_value = "30")]
+    #[arg(short, long, default_value = "30")]
     num_results: u32,
-
-    #[arg(short, long, default_value = "relevant")]
-    sort: Sort,
 
     /// Whether to return information about an exact attribute.
     #[arg(long)]
@@ -67,6 +63,9 @@ struct Opts {
     /// matching.
     #[arg(long)]
     filter_built: bool,
+
+    /// The search query.
+    query: String,
 }
 
 fn get_default_index_path() -> IndexPath {
@@ -75,11 +74,6 @@ fn get_default_index_path() -> IndexPath {
         .unwrap();
 
     IndexPath(dirs.get_data_home().join("rippkgs-index.sqlite"))
-}
-
-#[derive(Clone, Debug, ValueEnum)]
-enum Sort {
-    Relevant,
 }
 
 fn main() -> Result<()> {
@@ -94,7 +88,7 @@ fn main() -> Result<()> {
     let results = if opts.exact {
         let result =
             exact::search(opts.query.as_str(), &conn).context("searching for exact query")?;
-        serde_json::to_value(result).context("serializing exact result")?
+        serde_json::to_value(result.into_iter().collect::<Vec<_>>()).context("serializing exact result")?
     } else {
         let results = fuzzy::search(
             opts.query.as_str(),
