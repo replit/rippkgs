@@ -15,6 +15,7 @@ path = "src/bin/search/main.rs"
 
 [dependencies]
 clap = { version = "4.5.0", features = ["derive"] }
+comfy-table = "7.1.0"
 eyre = "0.6.12"
 fuzzy-matcher = "0.3.7"
 lazy_static = "1.4.0"

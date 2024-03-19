@@ -8,8 +8,10 @@ use std::path::PathBuf;
 
 use clap::builder::{PathBufValueParser, TypedValueParser};
 use clap::Parser;
+use comfy_table::TableComponent;
 use eyre::Context;
 use eyre::Result;
+use rippkgs::Package;
 use rusqlite::OpenFlags;
 use xdg::BaseDirectories;
 
@@ -64,6 +66,10 @@ struct Opts {
     #[arg(long)]
     filter_built: bool,
 
+    /// Print the results as json
+    #[arg(long)]
+    json: bool,
+
     /// The search query.
     query: String,
 }
@@ -85,10 +91,11 @@ fn main() -> Result<()> {
     )
     .context("reading index")?;
 
-    let results = if opts.exact {
+    let results: Box<dyn Iterator<Item = Package>> = if opts.exact {
         let result =
             exact::search(opts.query.as_str(), &conn).context("searching for exact query")?;
-        serde_json::to_value(result.into_iter().collect::<Vec<_>>()).context("serializing exact result")?
+
+        Box::new(result.into_iter())
     } else {
         let results = fuzzy::search(
             opts.query.as_str(),
@@ -97,10 +104,38 @@ fn main() -> Result<()> {
             opts.filter_built,
         )
         .context("searching for fuzzy query")?;
-        serde_json::to_value(results).context("serializing fuzzy results")?
+
+        Box::new(results.into_iter())
     };
 
-    serde_json::to_writer(stdout(), &results).context("printing results")?;
+    if opts.json {
+        serde_json::to_writer(stdout(), &results.collect::<Vec<_>>()).context("printing results")?
+    } else {
+        let mut table = comfy_table::Table::new();
+
+        table
+            .set_header(vec!["attribute", "version", "description"])
+            .remove_style(TableComponent::HorizontalLines)
+            .remove_style(TableComponent::MiddleIntersections)
+            .remove_style(TableComponent::LeftBorderIntersections)
+            .remove_style(TableComponent::RightBorderIntersections);
+        results.for_each(
+            |Package {
+                 attribute,
+                 version,
+                 description,
+                 ..
+             }| {
+                table.add_row(vec![
+                    attribute,
+                    version.unwrap_or_default(),
+                    description.unwrap_or_default(),
+                ]);
+            },
+        );
+
+        println!("{table}")
+    }
 
     Ok(())
 }
