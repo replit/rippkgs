@@ -33,7 +33,7 @@ in {
         };
       };
 
-      platformForAvailability = {system = pkgs.system or builtins.currentSystem;};
+      platformForAvailability = {system = pkgs.system;};
       isAvailableOn = tryEval (lib.meta.availableOn platformForAvailability safeValue.value);
       available = safeValue.success && isDerivation value && isAvailableOn.success && isAvailableOn.value;
 
