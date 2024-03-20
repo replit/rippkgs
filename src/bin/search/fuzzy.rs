@@ -26,9 +26,9 @@ pub fn search(
     let mut query = db
         .prepare(
             r#"
-SELECT *
+SELECT *, fuzzy_score(name, ?1) as score
 FROM packages
-ORDER BY fuzzy_score(name, ?1) DESC
+ORDER BY score DESC
             "#,
         )
         .context("preparing query")?;
@@ -73,11 +73,15 @@ ORDER BY fuzzy_score(name, ?1) DESC
 
 fn scalar_fuzzy_score(ctx: &FunctionContext) -> rusqlite::Result<i64> {
     lazy_static::lazy_static! {
-      static ref MATCHER: SkimMatcherV2 = SkimMatcherV2::default();
+      static ref MATCHER: SkimMatcherV2 = SkimMatcherV2::default().ignore_case();
     }
 
     let choice = ctx.get::<String>(0)?;
     let pattern = ctx.get::<String>(1)?;
+
+    if choice == pattern {
+        return Ok(i64::MAX);
+    }
 
     Ok(MATCHER.fuzzy_match(&choice, &pattern).unwrap_or(0))
 }

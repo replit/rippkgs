@@ -121,6 +121,7 @@ fn write_index(index: &Path, registry: Registry) -> Result<()> {
                      store_path,
                      description,
                      long_description,
+                     score: _score, // score not included in the database
                  }| {
                     create_row_query
                         .execute(rusqlite::params![

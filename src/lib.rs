@@ -3,11 +3,18 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Package {
     pub attribute: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub store_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub long_description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub score: Option<i64>,
 }
 
 impl Package {
@@ -37,6 +44,12 @@ impl<'r, 'd> TryFrom<&'r rusqlite::Row<'d>> for Package {
         let description: Option<String> = row.get("description")?;
         let long_description: Option<String> = row.get("long_description")?;
 
+        let score = if cfg!(debug_assertions) {
+            row.get("score")?
+        } else {
+            None
+        };
+
         Ok(Package {
             attribute,
             name,
@@ -44,6 +57,7 @@ impl<'r, 'd> TryFrom<&'r rusqlite::Row<'d>> for Package {
             description,
             long_description,
             store_path,
+            score,
         })
     }
 }
