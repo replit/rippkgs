@@ -4,7 +4,9 @@ rippkgs is a search CLI utility for searching indexed nixpkgs expressions.
 
 ## Usage
 
-First, an index must be generated. Doing so requires the `rippkgs-index` cli:
+### Generate an index
+
+Generating an index may be done with the `rippkgs-index` cli:
 ```sh
 rippkgs-index nixpkgs -o $XDG_DATA_HOME/rippkgs-index.sqlite
 ```
@@ -14,7 +16,15 @@ If you don't have a `nixpkgs` channel set (or would prefer to index a different 
 rippkgs-index nixpkgs -o $XDG_DATA_HOME/rippkgs-index.sqlite ~/.nix-defexpr/channels/my-very-special-nixpkgs-channel
 ```
 
-Afterwards, use the `rippkgs` cli to search for appropriate packages:
+Alternatively, you can generate a registry using the flake output `lib.genRegistry`, which allows you to avoid recursive-nix problems:
+```sh
+$ nix eval -L .#lib.genRegistry --apply 'f: f (import <nixpkgs> { })' --impure --json >registry.json
+$ rippkgs-index registry -o rippkgs-index.sqlite registry.json
+```
+
+### Searching
+
+Use the `rippkgs` cli to search for appropriate packages:
 ```sh
 rippkgs rustc
 ```
