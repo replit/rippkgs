@@ -16,6 +16,7 @@ use rippkgs::Package;
 use rusqlite::OpenFlags;
 
 #[derive(Debug, Parser)]
+#[clap(about = "Generate an index for use with the rippkgs cli")]
 struct Opts {
     #[clap(subcommand)]
     cmd: Subcmd,
@@ -23,7 +24,9 @@ struct Opts {
 
 #[derive(Debug, Subcommand)]
 enum Subcmd {
+    /// Generate an index from a registry JSON file
     Registry(ImportRegistry),
+    /// Generate an index from a nixpkgs expression
     Nixpkgs(IndexNixpkgs),
 }
 
