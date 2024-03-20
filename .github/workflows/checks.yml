@@ -14,3 +14,23 @@ jobs:
       - name: use Magic Nix Cache
         uses: DeterminateSystems/magic-nix-cache-action@main
       - run: nix flake check --all-systems
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: nix-flake-check
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+      - name: use Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: generate registry for inputs.nixpkgs
+        run: nix run .#rippkgs-index -- nixpkgs -o rippkgs-index.sqlite "$(nix flake metadata --inputs-from . --json nixpkgs | jq -r .path)"
+      - name: use jq
+        run: export PATH="$(nix build --print-out-paths --inputs-from . nixpkgs#jq | head -n 1):$PATH"
+      - name: rippkgs --exact zsh
+        run: nix run .#rippkgs -- --json --exact zsh | jq -f .github/workflows/validate-exact-zsh.jq
+      - name: rippkgs zsh
+        run: nix run .#rippkgs -- --json zsh | jq -f .github/workflows/validate-fuzzy-zsh.jq
