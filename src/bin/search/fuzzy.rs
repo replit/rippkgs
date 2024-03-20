@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::time::Instant;
 
 use eyre::Context;
 use fuzzy_matcher::skim::SkimMatcherV2;
@@ -33,9 +32,7 @@ ORDER BY score DESC
         )
         .context("preparing query")?;
 
-    let start = Instant::now();
-
-    let res = query
+    query
         .query_map(rusqlite::params![query_str], |r| Package::try_from(r))
         .map(|res| {
             res.filter(|package_res| {
@@ -63,12 +60,7 @@ ORDER BY score DESC
             .collect::<Result<Vec<_>, _>>()
             .context("parsing results")
         })
-        .context("executing query")?;
-
-    let elapsed = start.elapsed();
-    eprintln!("got results in {} ms", elapsed.as_millis());
-
-    res
+        .context("executing query")?
 }
 
 fn scalar_fuzzy_score(ctx: &FunctionContext) -> rusqlite::Result<i64> {
