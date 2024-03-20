@@ -67,20 +67,22 @@
         checks = {
           inherit (self'.packages) rippkgs rippkgs-index;
 
-          clippy = craneLib.cargoClippy (crane-common-args // {
-            inherit cargoArtifacts;
-            cargoClippyExtraArgs = "--all-targets -- --deny warnings";
-          });
+          clippy = craneLib.cargoClippy (crane-common-args
+            // {
+              inherit cargoArtifacts;
+              cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+            });
 
           cargo-fmt = craneLib.cargoFmt {
             src = ./.;
           };
 
-          cargo-nextest = craneLib.cargoNextest (crane-common-args // {
-            inherit cargoArtifacts;
-            partitions = 1;
-            partitionType = "count";
-          });
+          cargo-nextest = craneLib.cargoNextest (crane-common-args
+            // {
+              inherit cargoArtifacts;
+              partitions = 1;
+              partitionType = "count";
+            });
 
           nix-fmt = pkgs.runCommand "nix-fmt-check" {} ''
             cd ${./.}
