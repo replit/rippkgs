@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
+pub type Registry = HashMap<String, PackageInfo>;
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PackageInfo {
@@ -34,6 +36,37 @@ pub struct PackageMeta {
 pub enum OneOrList<T> {
     One(T),
     List(Vec<T>),
+}
+
+impl PackageInfo {
+    pub fn into_rippkgs_package(self, attribute: String) -> rippkgs::Package {
+        let name = self.pname;
+        let version = self.version;
+        let store_path = self
+            .store_paths
+            .map(|mut outs| outs.remove("out"))
+            .flatten();
+
+        let (description, long_description) = self
+            .meta
+            .map(
+                |PackageMeta {
+                     description,
+                     long_description,
+                     ..
+                 }| (description, long_description),
+            )
+            .unzip();
+
+        rippkgs::Package {
+            attribute,
+            name,
+            version,
+            store_path,
+            description: description.flatten(),
+            long_description: long_description.flatten(),
+        }
+    }
 }
 
 #[cfg(test)]

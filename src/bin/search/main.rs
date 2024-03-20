@@ -7,12 +7,15 @@ use std::io::stdout;
 use std::path::PathBuf;
 
 use clap::builder::{PathBufValueParser, TypedValueParser};
-use clap::{Parser, ValueEnum};
+use clap::Parser;
+use comfy_table::TableComponent;
 use eyre::Context;
 use eyre::Result;
+use rippkgs::Package;
 use rusqlite::OpenFlags;
 use xdg::BaseDirectories;
 
+/// Custom type because clap needs to use Display to print the default value.
 #[derive(Clone, Debug)]
 struct IndexPath(PathBuf);
 
@@ -46,18 +49,13 @@ impl TypedValueParser for IndexPathValueParser {
 
 #[derive(Debug, Parser)]
 struct Opts {
-    /// The location of the nixpkgs index to use.
+    /// The location of the rippkgs index to use.
     #[arg(short, long, default_value_t = get_default_index_path(), value_parser = IndexPathValueParser::default())]
     index: IndexPath,
 
-    query: String,
-
     /// The number of results to return.
-    #[arg(default_value = "30")]
+    #[arg(short, long, default_value = "30")]
     num_results: u32,
-
-    #[arg(short, long, default_value = "relevant")]
-    sort: Sort,
 
     /// Whether to return information about an exact attribute.
     #[arg(long)]
@@ -67,6 +65,13 @@ struct Opts {
     /// matching.
     #[arg(long)]
     filter_built: bool,
+
+    /// Print the results as json
+    #[arg(long)]
+    json: bool,
+
+    /// The search query.
+    query: String,
 }
 
 fn get_default_index_path() -> IndexPath {
@@ -77,11 +82,6 @@ fn get_default_index_path() -> IndexPath {
     IndexPath(dirs.get_data_home().join("rippkgs-index.sqlite"))
 }
 
-#[derive(Clone, Debug, ValueEnum)]
-enum Sort {
-    Relevant,
-}
-
 fn main() -> Result<()> {
     let opts = Opts::parse();
 
@@ -89,12 +89,13 @@ fn main() -> Result<()> {
         opts.index.0,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
-    .context("unable to read index")?;
+    .context("reading index")?;
 
-    let results = if opts.exact {
+    let results: Box<dyn Iterator<Item = Package>> = if opts.exact {
         let result =
-            exact::search(opts.query.as_str(), &conn).context("error searching for exact query")?;
-        serde_json::to_value(result).context("error serializing exact result")?
+            exact::search(opts.query.as_str(), &conn).context("searching for exact query")?;
+
+        Box::new(result.into_iter())
     } else {
         let results = fuzzy::search(
             opts.query.as_str(),
@@ -102,11 +103,39 @@ fn main() -> Result<()> {
             opts.num_results,
             opts.filter_built,
         )
-        .context("error searching for fuzzy query")?;
-        serde_json::to_value(results).context("error serializing fuzzy results")?
+        .context("searching for fuzzy query")?;
+
+        Box::new(results.into_iter())
     };
 
-    serde_json::to_writer(stdout(), &results).context("error printing results")?;
+    if opts.json {
+        serde_json::to_writer(stdout(), &results.collect::<Vec<_>>()).context("printing results")?
+    } else {
+        let mut table = comfy_table::Table::new();
+
+        table
+            .set_header(vec!["attribute", "version", "description"])
+            .remove_style(TableComponent::HorizontalLines)
+            .remove_style(TableComponent::MiddleIntersections)
+            .remove_style(TableComponent::LeftBorderIntersections)
+            .remove_style(TableComponent::RightBorderIntersections);
+        results.for_each(
+            |Package {
+                 attribute,
+                 version,
+                 description,
+                 ..
+             }| {
+                table.add_row(vec![
+                    attribute,
+                    version.unwrap_or_default(),
+                    description.unwrap_or_default(),
+                ]);
+            },
+        );
+
+        println!("{table}")
+    }
 
     Ok(())
 }

@@ -7,7 +7,7 @@ use fuzzy_matcher::FuzzyMatcher;
 use rusqlite::functions::Context as FunctionContext;
 use rusqlite::{functions::FunctionFlags, Connection};
 
-use crate::data::Package;
+use rippkgs::Package;
 
 pub fn search(
     query_str: &str,
@@ -21,7 +21,7 @@ pub fn search(
         FunctionFlags::SQLITE_UTF8,
         scalar_fuzzy_score,
     )
-    .context("unable to install `fuzzy_score` function")?;
+    .context("installing `fuzzy_score` function")?;
 
     let mut query = db
         .prepare(
@@ -31,7 +31,7 @@ FROM packages
 ORDER BY fuzzy_score(name, ?1) DESC
             "#,
         )
-        .context("unable to prepare search query")?;
+        .context("preparing query")?;
 
     let start = Instant::now();
 
@@ -61,9 +61,9 @@ ORDER BY fuzzy_score(name, ?1) DESC
             })
             .take(num_results as _)
             .collect::<Result<Vec<_>, _>>()
-            .context("error parsing results")
+            .context("parsing results")
         })
-        .context("unable to execute query")?;
+        .context("executing query")?;
 
     let elapsed = start.elapsed();
     eprintln!("got results in {} ms", elapsed.as_millis());

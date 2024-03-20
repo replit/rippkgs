@@ -64,7 +64,7 @@
           craneLib = inputs.crane.lib.${system}.overrideToolchain rust-toolchain.toolchain;
 
           common-args = {
-            src = craneLib.cleanCargoSource (craneLib.path ./.);
+            src = ./.;
             strict-deps = true;
 
             buildInputs =
