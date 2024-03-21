@@ -37,7 +37,7 @@ struct ImportRegistry {
     registry: PathBuf,
 
     /// The location to write the saved index to.
-    #[clap(short, long)]
+    #[clap(short, long, default_value = "rippkgs-index.sqlite")]
     output: PathBuf,
 }
 
@@ -47,17 +47,16 @@ struct IndexNixpkgs {
     #[clap(short = 'r', long)]
     save_registry: Option<PathBuf>,
 
-    /// Optional expression to use for the `config` argument to `import <nixpkgs>`. If omitted,
-    /// will default to `{}`.
-    #[clap(short = 'c', long)]
-    nixpkgs_config: Option<String>,
+    /// Optional expression to use for the `config` argument to `import <nixpkgs>`.
+    #[clap(short = 'a', long, default_value = "{}")]
+    nixpkgs_arg: String,
 
-    /// The location of Nixpkgs on-disk to index. If omitted, will default to importing `<nixpkgs>`
-    /// without passing the `-I` flag to nix.
+    /// The location of Nixpkgs on-disk to index. If omitted, will import `<nixpkgs>` without
+    /// passing the `-I` flag to nix.
     nixpkgs: Option<PathBuf>,
 
     /// The location to write the saved index to.
-    #[clap(short, long)]
+    #[clap(short, long, default_value = "rippkgs-index.sqlite")]
     output: PathBuf,
 }
 
@@ -151,7 +150,7 @@ fn write_index(index: &Path, registry: Registry) -> Result<()> {
 fn index_nixpkgs(
     IndexNixpkgs {
         save_registry,
-        nixpkgs_config,
+        nixpkgs_arg,
         nixpkgs,
         ..
     }: &IndexNixpkgs,
@@ -160,11 +159,10 @@ fn index_nixpkgs(
         r#"
 genRegistry:
 
-let pkgs = import <nixpkgs> {{ config = {}; }};
+let pkgs = import <nixpkgs> {nixpkgs_arg};
     genRegistry' = genRegistry pkgs;
 in genRegistry' pkgs
         "#,
-        nixpkgs_config.as_deref().unwrap_or("{}"),
     );
 
     let mut args = vec![
