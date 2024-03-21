@@ -28,39 +28,42 @@ pub fn search(
 SELECT *, fuzzy_score(name, ?1) as score
 FROM packages
 ORDER BY score DESC
+LIMIT ?2
             "#,
         )
         .context("preparing query")?;
 
-    query
-        .query_map(rusqlite::params![query_str], |r| Package::try_from(r))
-        .map(|res| {
-            res.filter(|package_res| {
-                let Ok(package) = package_res else {
-                    // carry on the error
-                    return true;
-                };
-
-                let Some(store_path) = package.store_path.as_ref() else {
-                    // only None when the package is stdenv (not installable) or part of
-                    // bootstrapping (should use other attrs). We always filter these out because
-                    // they're almost always irrelevant.
-                    return false;
-                };
-
-                if !filter_built {
-                    // we don't care about filtering out results based on presence of the store
-                    // path.
-                    return true;
-                }
-
-                PathBuf::from("/nix/store/").join(store_path).exists()
-            })
-            .take(num_results as _)
-            .collect::<Result<Vec<_>, _>>()
-            .context("parsing results")
+    let res = query
+        .query_map(rusqlite::params![query_str, num_results], |r| {
+            Package::try_from(r)
         })
         .context("executing query")?
+        .filter(|package_res| {
+            let Ok(package) = package_res else {
+                // carry on the error
+                return true;
+            };
+
+            let Some(store_path) = package.store_path.as_ref() else {
+                // only None when the package is stdenv (not installable) or part of
+                // bootstrapping (should use other attrs). We always filter these out because
+                // they're almost always irrelevant.
+                return false;
+            };
+
+            if !filter_built {
+                // we don't care about filtering out results based on presence of the store
+                // path.
+                return true;
+            }
+
+            PathBuf::from("/nix/store/").join(store_path).exists()
+        })
+        .take(num_results as _)
+        .collect::<Result<Vec<_>, _>>()
+        .context("parsing results");
+
+    res
 }
 
 fn scalar_fuzzy_score(ctx: &FunctionContext) -> rusqlite::Result<i64> {

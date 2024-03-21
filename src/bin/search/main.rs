@@ -53,20 +53,24 @@ struct Opts {
     #[arg(short, long, default_value_t = get_default_index_path(), value_parser = IndexPathValueParser::default())]
     index: IndexPath,
 
-    /// The number of results to return.
+    /// The maximum number of results to return.
+    ///
+    /// Note that flags like --filter-built will take effect after collecting this number of
+    /// results.
     #[arg(short, long, default_value = "30")]
-    num_results: u32,
+    max_results: u32,
 
     /// Whether to return information about an exact attribute.
     #[arg(long)]
     exact: bool,
 
-    /// Filter results by whether the /nix/store path already exists. Only applies when doing fuzzy
-    /// matching.
+    /// Filter results by whether the /nix/store path already exists.
+    ///
+    /// Only applies when doing fuzzy matching.
     #[arg(long)]
     filter_built: bool,
 
-    /// Print the results as json
+    /// Print the results as json.
     #[arg(long)]
     json: bool,
 
@@ -100,7 +104,7 @@ fn main() -> Result<()> {
         let results = fuzzy::search(
             opts.query.as_str(),
             &conn,
-            opts.num_results,
+            opts.max_results,
             opts.filter_built,
         )
         .context("searching for fuzzy query")?;
