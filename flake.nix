@@ -34,6 +34,9 @@
 
       perSystem = {
         config,
+        craneLib,
+        crane-common-args,
+        cargoArtifacts,
         lib,
         pkgs,
         rust-toolchain,
@@ -43,27 +46,9 @@
       }: {
         _module.args = {
           rust-toolchain = inputs.fenix.packages.${system}.stable;
-        };
-
-        formatter = pkgs.alejandra;
-
-        devShells.default = self'.devShells.rippkgs;
-        devshells.rippkgs = {
-          packages = [
-            rust-toolchain.toolchain
-            pkgs.jq
-            pkgs.sqlite
-          ];
-        };
-
-        overlayAttrs = {
-          inherit (config.packages) rippkgs rippkgs-index;
-        };
-
-        packages = let
           craneLib = inputs.crane.lib.${system}.overrideToolchain rust-toolchain.toolchain;
 
-          common-args = {
+          crane-common-args = {
             src = ./.;
             strict-deps = true;
 
@@ -76,20 +61,66 @@
               ];
           };
 
-          cargoArtifacts = craneLib.buildDepsOnly common-args;
-        in {
+          cargoArtifacts = craneLib.buildDepsOnly crane-common-args;
+        };
+
+        checks = {
+          inherit (self'.packages) rippkgs rippkgs-index;
+
+          clippy = craneLib.cargoClippy (crane-common-args
+            // {
+              inherit cargoArtifacts;
+              cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+            });
+
+          cargo-fmt = craneLib.cargoFmt {
+            src = ./.;
+          };
+
+          cargo-nextest = craneLib.cargoNextest (crane-common-args
+            // {
+              inherit cargoArtifacts;
+              partitions = 1;
+              partitionType = "count";
+            });
+
+          nix-fmt = pkgs.runCommand "nix-fmt-check" {} ''
+            cd ${./.}
+            ${pkgs.alejandra}/bin/alejandra --check . && mkdir -p $out
+          '';
+        };
+
+        formatter = pkgs.alejandra;
+
+        devShells.default = self'.devShells.rippkgs;
+        devshells.rippkgs = {
+          packages = [
+            rust-toolchain.toolchain
+            pkgs.alejandra
+            pkgs.jq
+            pkgs.sqlite
+          ];
+        };
+
+        overlayAttrs = {
+          inherit (config.packages) rippkgs rippkgs-index;
+        };
+
+        packages = {
           default = self'.packages.rippkgs;
 
-          rippkgs = craneLib.buildPackage (common-args
+          rippkgs = craneLib.buildPackage (crane-common-args
             // {
               inherit cargoArtifacts;
               pname = "rippkgs";
+              cargoExtraArgs = "--bin rippkgs";
             });
 
-          rippkgs-index = craneLib.buildPackage (common-args
+          rippkgs-index = craneLib.buildPackage (crane-common-args
             // {
               inherit cargoArtifacts;
               pname = "rippkgs-index";
+              cargoExtraArgs = "--bin rippkgs-index";
             });
         };
       };

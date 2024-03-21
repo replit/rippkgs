@@ -178,9 +178,9 @@ in genRegistry' pkgs
 
     let mut nixpkgs_include_arg = String::new();
     if let Some(nixpkgs) = nixpkgs.as_ref() {
-      nixpkgs_include_arg.push_str(format!("nixpkgs={}", nixpkgs.display()).as_str());
-      args.push("-I");
-      args.push(nixpkgs_include_arg.as_str());
+        nixpkgs_include_arg.push_str(format!("nixpkgs={}", nixpkgs.display()).as_str());
+        args.push("-I");
+        args.push(nixpkgs_include_arg.as_str());
     }
 
     let start = Instant::now();

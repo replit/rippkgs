@@ -42,10 +42,7 @@ impl PackageInfo {
     pub fn into_rippkgs_package(self, attribute: String) -> rippkgs::Package {
         let name = self.pname;
         let version = self.version;
-        let store_path = self
-            .store_paths
-            .map(|mut outs| outs.remove("out"))
-            .flatten();
+        let store_path = self.store_paths.and_then(|mut outs| outs.remove("out"));
 
         let (description, long_description) = self
             .meta
