@@ -62,6 +62,7 @@ impl PackageInfo {
             store_path,
             description: description.flatten(),
             long_description: long_description.flatten(),
+            score: None,
         }
     }
 }
