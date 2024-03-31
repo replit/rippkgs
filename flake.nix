@@ -93,7 +93,7 @@
         formatter = pkgs.alejandra;
 
         devShells.default = self'.devShells.rippkgs;
-        devshells.rippkgs = {
+        devShells.rippkgs = {
           packages = [
             rust-toolchain.toolchain
             pkgs.alejandra
