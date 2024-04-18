@@ -4,6 +4,28 @@ rippkgs is a search CLI utility for searching indexed nixpkgs expressions.
 
 ## Usage
 
+### Installation
+
+Once <https://github.com/NixOS/nixpkgs/pull/305125> is merged, if you have the commit you can use install using your preferred way of installing nixpkgs derivations.
+For example:
+```sh
+$ nix profile install nixpkgs#rippkgs nixpkgs#rippkgs-index
+# alternatively, via the flake directly
+$ nix profile install github:replit/rippkgs/v1.1.0
+```
+
+Alternatively, if you're using a flake to configure your system, you can add rippkgs via nixpkgs or as an input to your flake and add rippkgs to your environment packages.
+For example, in NixOS:
+```nix
+environment.systemPackages = [
+  pkgs.rippkgs
+  pkgs.rippkgs-index
+  # alternatively, if via the flake input:
+  inputs.rippkgs.packages.${system}.rippkgs
+  inputs.rippkgs.packages.${system}.rippkgs-index
+];
+```
+
 ### Generate an index
 
 Generating an index may be done with the `rippkgs-index` cli:
