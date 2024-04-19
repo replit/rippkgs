@@ -116,6 +116,7 @@
               inherit cargoArtifacts;
               pname = "rippkgs";
               cargoExtraArgs = "--bin rippkgs";
+              meta.mainProgram = "rippkgs";
             });
 
           rippkgs-index = craneLib.buildPackage (crane-common-args
@@ -123,6 +124,7 @@
               inherit cargoArtifacts;
               pname = "rippkgs-index";
               cargoExtraArgs = "--bin rippkgs-index";
+              meta.mainProgram = "rippkgs";
             });
         };
       };
