@@ -15,6 +15,9 @@ pub struct Package {
     pub long_description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub score: Option<i64>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub present: Option<bool>,
 }
 
 impl Package {
@@ -58,6 +61,7 @@ impl<'r, 'd> TryFrom<&'r rusqlite::Row<'d>> for Package {
             long_description,
             store_path,
             score,
+            present: Default::default(),
         })
     }
 }
