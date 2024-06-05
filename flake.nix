@@ -124,7 +124,7 @@
               inherit cargoArtifacts;
               pname = "rippkgs-index";
               cargoExtraArgs = "--bin rippkgs-index";
-              meta.mainProgram = "rippkgs";
+              meta.mainProgram = "rippkgs-index";
             });
         };
       };
