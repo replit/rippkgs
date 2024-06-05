@@ -59,6 +59,25 @@ LIMIT ?2
 
             PathBuf::from("/nix/store/").join(store_path).exists()
         })
+        .map(|package_res| {
+            if filter_built {
+                return package_res;
+            }
+
+            let Ok(mut package) = package_res else {
+                return package_res;
+            };
+
+            let Some(store_path) = package.store_path.as_ref() else {
+                // only None when the package is stdenv (not installable) or part of
+                // bootstrapping (should use other attrs). We always filter these out because
+                // they're almost always irrelevant.
+                return Ok(package);
+            };
+
+            package.present = Some(PathBuf::from("/nix/store/").join(store_path).exists());
+            Ok(package)
+        })
         .take(num_results as _)
         .collect::<Result<Vec<_>, _>>()
         .context("parsing results");

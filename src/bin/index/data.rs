@@ -63,6 +63,7 @@ impl PackageInfo {
             description: description.flatten(),
             long_description: long_description.flatten(),
             score: None,
+            present: None,
         }
     }
 }
