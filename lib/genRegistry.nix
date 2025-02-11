@@ -41,15 +41,13 @@
         in
           lib.unique (directInputs ++ recursiveInputs);
       in
-        builtins.trace name (
-          map (x:
-            removePrefix "/nix/store/" (
-              if lib.isAttrs x
-              then x.outPath
-              else x
-            )) (
-            collectInputs (safeVal.propagatedBuildInputs or [])
-          )
+        map (x:
+          removePrefix "/nix/store/" (
+            if lib.isAttrs x
+            then x.outPath
+            else x
+          )) (
+          collectInputs (safeVal.propagatedBuildInputs or [])
         );
 
       propagatedNativeBuildInputs = let
@@ -68,15 +66,13 @@
         in
           lib.unique (directInputs ++ recursiveInputs);
       in
-        builtins.trace name (
-          map (x:
-            removePrefix "/nix/store/" (
-              if lib.isAttrs x
-              then x.outPath
-              else x
-            )) (
-            collectInputs (safeVal.propagatedNativeBuildInputs or [])
-          )
+        map (x:
+          removePrefix "/nix/store/" (
+            if lib.isAttrs x
+            then x.outPath
+            else x
+          )) (
+          collectInputs (safeVal.propagatedNativeBuildInputs or [])
         );
 
       meta = {
