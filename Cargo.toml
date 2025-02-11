@@ -1,6 +1,6 @@
 [package]
 name = "rippkgs"
-version = "1.1.0"
+version = "1.2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -14,14 +14,14 @@ name = "rippkgs"
 path = "src/bin/search/main.rs"
 
 [dependencies]
-clap = { version = "4.5.0", features = ["derive"] }
-comfy-table = "7.1.0"
+clap = { version = "4.5.29", features = ["derive"] }
+comfy-table = "7.1.4"
 eyre = "0.6.12"
 fuzzy-matcher = "0.3.7"
-lazy_static = "1.4.0"
-rusqlite = { version = "0.30.0", features = ["functions"] }
-serde = { version = "1.0.196", features = ["derive"] }
-serde_json = "1.0.113"
+lazy_static = "1.5.0"
+rusqlite = { version = "0.33.0", features = ["functions"] }
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.138"
 xdg = "2.5.2"
 
 [dev-dependencies]

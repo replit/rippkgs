@@ -15,6 +15,7 @@ pub struct PackageInfo {
     pub propagated_native_build_inputs: Option<Vec<String>>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PackageMeta {
@@ -33,6 +34,7 @@ pub struct PackageMeta {
     pub unsupported: bool,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum OneOrList<T> {

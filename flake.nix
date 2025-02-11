@@ -1,16 +1,8 @@
 {
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-24.11";
 
-    crane = {
-      url = "github:ipetkov/crane";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    devshell = {
-      url = "github:numtide/devshell";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    crane.url = "github:ipetkov/crane";
 
     fenix = {
       url = "github:nix-community/fenix";
@@ -23,7 +15,6 @@
   outputs = inputs:
     inputs.flake-parts.lib.mkFlake {inherit inputs;} {
       imports = [
-        inputs.devshell.flakeModule
         inputs.flake-parts.flakeModules.easyOverlay
       ];
 
@@ -47,8 +38,8 @@
         ...
       }: {
         _module.args = {
-          rust-toolchain = inputs.fenix.packages.${system}.stable;
-          craneLib = inputs.crane.lib.${system}.overrideToolchain rust-toolchain.toolchain;
+          rust-toolchain = inputs.fenix.packages.${system}.stable.toolchain;
+          craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rust-toolchain;
 
           crane-common-args = {
             src = ./.;
@@ -95,9 +86,9 @@
         formatter = pkgs.alejandra;
 
         devShells.default = self'.devShells.rippkgs;
-        devshells.rippkgs = {
+        devShells.rippkgs = pkgs.mkShell {
           packages = [
-            rust-toolchain.toolchain
+            rust-toolchain
             pkgs.alejandra
             pkgs.jq
             pkgs.sqlite
