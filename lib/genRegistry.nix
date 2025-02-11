@@ -22,9 +22,62 @@
         };
 
         outputs-list = map getOutput (safeVal.outputs or []);
-        relevant-outputs = filter ({name, ...}: name == "out") outputs-list;
       in
-        listToAttrs relevant-outputs;
+        listToAttrs outputs-list;
+
+      propagatedBuildInputs = let
+        collectInputs = inputList: let
+          directInputs = lib.filter (x: x != null) (lib.lists.flatten inputList);
+          recursiveInputs = lib.flatten (
+            map
+            (
+              x:
+                if lib.isAttrs x && x ? propagatedBuildInputs
+                then collectInputs x.propagatedBuildInputs
+                else []
+            )
+            directInputs
+          );
+        in
+          lib.unique (directInputs ++ recursiveInputs);
+      in
+        builtins.trace name (
+          map (x:
+            removePrefix "/nix/store/" (
+              if lib.isAttrs x
+              then x.outPath
+              else x
+            )) (
+            collectInputs (safeVal.propagatedBuildInputs or [])
+          )
+        );
+
+      propagatedNativeBuildInputs = let
+        collectInputs = inputList: let
+          directInputs = lib.filter (x: x != null) (lib.lists.flatten inputList);
+          recursiveInputs = lib.flatten (
+            map
+            (
+              x:
+                if lib.isAttrs x && x ? propagatedNativeBuildInputs
+                then collectInputs x.propagatedNativeBuildInputs
+                else []
+            )
+            directInputs
+          );
+        in
+          lib.unique (directInputs ++ recursiveInputs);
+      in
+        builtins.trace name (
+          map (x:
+            removePrefix "/nix/store/" (
+              if lib.isAttrs x
+              then x.outPath
+              else x
+            )) (
+            collectInputs (safeVal.propagatedNativeBuildInputs or [])
+          )
+        );
 
       meta = {
         description = safeVal.meta.description or null;
@@ -80,7 +133,8 @@
     list-of-scope-packages = mapAttrsToList registerPackage safeScope.value;
     scope-registry-inner = flatten list-of-scope-packages;
     scope-registry =
-      map (item: {
+      map
+      (item: {
         name = "${scope-name}.${item.name}";
         value = item.value;
       })

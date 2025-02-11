@@ -3,4 +3,4 @@
 /nixpkgs.json
 /nixpkgs.sqlite
 /evaluated.json
-
+/.direnv

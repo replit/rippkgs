@@ -103,8 +103,8 @@ fn write_index(index: &Path, registry: Registry) -> Result<()> {
         let mut create_row_query = tx
             .prepare(
                 r#"
-    INSERT INTO packages (attribute, name, version, storePath, description, long_description)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO packages (attribute, name, version, storePaths, propagatedBuildInputs, propagatedNativeBuildInputs, description, long_description)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 "#,
             )
             .context("preparing INSERT query")?;
@@ -117,18 +117,35 @@ fn write_index(index: &Path, registry: Registry) -> Result<()> {
                      attribute,
                      name,
                      version,
-                     store_path,
+                     store_paths,
+                     propagated_build_inputs,
+                     propagated_native_build_inputs,
                      description,
                      long_description,
                      score: _score, // score not included in the database
                      ..
                  }| {
+                    let store_paths = store_paths
+                        .map(|store_paths| serde_json::to_string(&store_paths))
+                        .transpose()?;
+                    let propagated_build_inputs = propagated_build_inputs
+                        .map(|propagated_build_inputs| {
+                            serde_json::to_string(&propagated_build_inputs)
+                        })
+                        .transpose()?;
+                    let propagated_native_build_inputs = propagated_native_build_inputs
+                        .map(|propagated_native_build_inputs| {
+                            serde_json::to_string(&propagated_native_build_inputs)
+                        })
+                        .transpose()?;
                     create_row_query
                         .execute(rusqlite::params![
                             attribute,
                             name,
                             version,
-                            store_path,
+                            store_paths,
+                            propagated_build_inputs,
+                            propagated_native_build_inputs,
                             description,
                             long_description
                         ])

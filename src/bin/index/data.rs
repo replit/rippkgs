@@ -11,6 +11,8 @@ pub struct PackageInfo {
     pub version: Option<String>,
     pub meta: Option<PackageMeta>,
     pub store_paths: Option<HashMap<String, String>>,
+    pub propagated_build_inputs: Option<Vec<String>>,
+    pub propagated_native_build_inputs: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -42,7 +44,9 @@ impl PackageInfo {
     pub fn into_rippkgs_package(self, attribute: String) -> rippkgs::Package {
         let name = self.pname;
         let version = self.version;
-        let store_path = self.store_paths.and_then(|mut outs| outs.remove("out"));
+        let store_paths = self.store_paths;
+        let propagated_build_inputs = self.propagated_build_inputs;
+        let propagated_native_build_inputs = self.propagated_native_build_inputs;
 
         let (description, long_description) = self
             .meta
@@ -59,7 +63,9 @@ impl PackageInfo {
             attribute,
             name,
             version,
-            store_path,
+            store_paths,
+            propagated_build_inputs,
+            propagated_native_build_inputs,
             description: description.flatten(),
             long_description: long_description.flatten(),
             score: None,
