@@ -13,13 +13,18 @@ pub fn search(query_str: &str, db: &Connection) -> eyre::Result<Option<Package>>
 
     match result {
         Ok(mut res) => {
-            let Some(store_path) = res.store_path.as_ref() else {
+            let Some(store_paths) = res.store_paths.as_ref() else {
                 // only None when the package is stdenv (not installable) or part of
                 // bootstrapping (should use other attrs). We always filter these out because
                 // they're almost always irrelevant.
                 return Ok(None);
             };
-            res.present = Some(PathBuf::from("/nix/store/").join(store_path).exists());
+
+            let Some(out_path) = store_paths.get("out") else {
+                // this is a package that doesn't have an out path, so it's not installable
+                return Ok(None);
+            };
+            res.present = Some(PathBuf::from("/nix/store/").join(out_path).exists());
             Ok(Some(res))
         }
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),

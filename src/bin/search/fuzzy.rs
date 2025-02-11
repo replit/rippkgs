@@ -44,7 +44,7 @@ LIMIT ?2
                 return true;
             };
 
-            let Some(store_path) = package.store_path.as_ref() else {
+            let Some(store_path) = package.store_paths.as_ref().and_then(|x| x.get("out")) else {
                 // only None when the package is stdenv (not installable) or part of
                 // bootstrapping (should use other attrs). We always filter these out because
                 // they're almost always irrelevant.
@@ -68,7 +68,7 @@ LIMIT ?2
                 return package_res;
             };
 
-            let Some(store_path) = package.store_path.as_ref() else {
+            let Some(store_path) = package.store_paths.as_ref().and_then(|x| x.get("out")) else {
                 // only None when the package is stdenv (not installable) or part of
                 // bootstrapping (should use other attrs). We always filter these out because
                 // they're almost always irrelevant.
