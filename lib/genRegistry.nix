@@ -1,4 +1,8 @@
-{lib, ...}: pkgs: let
+{
+  lib,
+  buildPropagatedInputs ? false,
+  ...
+}: pkgs: let
   inherit (builtins) deepSeq filter listToAttrs map parseDrvName seq tryEval;
   inherit (lib) filterAttrs flatten foldl isDerivation mapAttrsToList optional optionals removePrefix traceVal;
 
@@ -25,55 +29,61 @@
       in
         listToAttrs outputs-list;
 
-      propagatedBuildInputs = let
-        collectInputs = inputList: let
-          directInputs = lib.filter (x: x != null) (lib.lists.flatten inputList);
-          recursiveInputs = lib.flatten (
-            map
-            (
-              x:
-                if lib.isAttrs x && x ? propagatedBuildInputs
-                then collectInputs x.propagatedBuildInputs
-                else []
-            )
-            directInputs
-          );
+      propagatedBuildInputs =
+        if buildPropagatedInputs
+        then let
+          collectInputs = inputList: let
+            directInputs = lib.filter (x: x != null) (lib.lists.flatten inputList);
+            recursiveInputs = lib.flatten (
+              map
+              (
+                x:
+                  if lib.isAttrs x && x ? propagatedBuildInputs
+                  then collectInputs x.propagatedBuildInputs
+                  else []
+              )
+              directInputs
+            );
+          in
+            lib.unique (directInputs ++ recursiveInputs);
         in
-          lib.unique (directInputs ++ recursiveInputs);
-      in
-        map (x:
-          removePrefix "/nix/store/" (
-            if lib.isAttrs x
-            then x.outPath
-            else x
-          )) (
-          collectInputs (safeVal.propagatedBuildInputs or [])
-        );
+          map (x:
+            removePrefix "/nix/store/" (
+              if lib.isAttrs x
+              then x.outPath
+              else x
+            )) (
+            collectInputs (safeVal.propagatedBuildInputs or [])
+          )
+        else [];
 
-      propagatedNativeBuildInputs = let
-        collectInputs = inputList: let
-          directInputs = lib.filter (x: x != null) (lib.lists.flatten inputList);
-          recursiveInputs = lib.flatten (
-            map
-            (
-              x:
-                if lib.isAttrs x && x ? propagatedNativeBuildInputs
-                then collectInputs x.propagatedNativeBuildInputs
-                else []
-            )
-            directInputs
-          );
+      propagatedNativeBuildInputs =
+        if buildPropagatedInputs
+        then let
+          collectInputs = inputList: let
+            directInputs = lib.filter (x: x != null) (lib.lists.flatten inputList);
+            recursiveInputs = lib.flatten (
+              map
+              (
+                x:
+                  if lib.isAttrs x && x ? propagatedNativeBuildInputs
+                  then collectInputs x.propagatedNativeBuildInputs
+                  else []
+              )
+              directInputs
+            );
+          in
+            lib.unique (directInputs ++ recursiveInputs);
         in
-          lib.unique (directInputs ++ recursiveInputs);
-      in
-        map (x:
-          removePrefix "/nix/store/" (
-            if lib.isAttrs x
-            then x.outPath
-            else x
-          )) (
-          collectInputs (safeVal.propagatedNativeBuildInputs or [])
-        );
+          map (x:
+            removePrefix "/nix/store/" (
+              if lib.isAttrs x
+              then x.outPath
+              else x
+            )) (
+            collectInputs (safeVal.propagatedNativeBuildInputs or [])
+          )
+        else [];
 
       meta = {
         description = safeVal.meta.description or null;
