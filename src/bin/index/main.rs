@@ -55,6 +55,10 @@ struct IndexNixpkgs {
     /// passing the `-I` flag to nix.
     nixpkgs: Option<PathBuf>,
 
+    /// Whether to include propagated build inputs in the index.
+    #[clap(long)]
+    build_propagated_inputs: bool,
+
     /// The location to write the saved index to.
     #[clap(short, long, default_value = "rippkgs-index.sqlite")]
     output: PathBuf,
@@ -170,6 +174,7 @@ fn index_nixpkgs(
         save_registry,
         nixpkgs_arg,
         nixpkgs,
+        build_propagated_inputs,
         ..
     }: &IndexNixpkgs,
 ) -> Result<Registry> {
@@ -178,7 +183,7 @@ fn index_nixpkgs(
 genRegistry:
 
 let pkgs = import <nixpkgs> {nixpkgs_arg};
-    genRegistry' = genRegistry pkgs;
+    genRegistry' = genRegistry (pkgs // {{ buildPropagatedInputs = {build_propagated_inputs}; }});
 in genRegistry' pkgs
         "#,
     );
