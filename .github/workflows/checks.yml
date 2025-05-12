@@ -10,12 +10,9 @@ jobs:
         with:
           fetch-depth: 0
       - name: install Nix
-        uses: nixbuild/nix-quick-install-action@master
-      - name: Set up Nix cache
-        uses: nix-community/cache-nix-action@main
-        with:
-          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}
+        uses: DeterminateSystems/nix-installer-action@main
+      - name: use FlakeHub Cache
+        uses: DeterminateSystems/flakehub-cache-action@main
       - run: nix flake check --all-systems
 
   e2e:
@@ -26,12 +23,9 @@ jobs:
         with:
           fetch-depth: 0
       - name: install Nix
-        uses: nixbuild/nix-quick-install-action@master
-      - name: Set up Nix cache
-        uses: nix-community/cache-nix-action@main
-        with:
-          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}
+        uses: DeterminateSystems/nix-installer-action@main
+      - name: use FlakeHub Cache
+        uses: DeterminateSystems/flakehub-cache-action@main
       - name: generate registry for inputs.nixpkgs
         run: nix run .#rippkgs-index -- nixpkgs -o rippkgs-index.sqlite "$(nix flake metadata --inputs-from . --json nixpkgs | jq -r .path)"
       - name: use jq
