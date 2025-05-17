@@ -42,7 +42,10 @@
           craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rust-toolchain;
 
           crane-common-args = {
-            src = ./.;
+            src = builtins.path {
+              path = ./.;
+              name = "source";
+            };
             strict-deps = true;
 
             buildInputs =
@@ -60,25 +63,37 @@
         checks = {
           inherit (self'.packages) rippkgs rippkgs-index;
 
-          clippy = craneLib.cargoClippy (crane-common-args
+          clippy = craneLib.cargoClippy (
+            crane-common-args
             // {
               inherit cargoArtifacts;
               cargoClippyExtraArgs = "--all-targets -- --deny warnings";
-            });
+            }
+          );
 
           cargo-fmt = craneLib.cargoFmt {
-            src = ./.;
+            src = builtins.path {
+              path = ./.;
+              name = "source";
+            };
           };
 
-          cargo-nextest = craneLib.cargoNextest (crane-common-args
+          cargo-nextest = craneLib.cargoNextest (
+            crane-common-args
             // {
               inherit cargoArtifacts;
               partitions = 1;
               partitionType = "count";
-            });
+            }
+          );
 
           nix-fmt = pkgs.runCommand "nix-fmt-check" {} ''
-            cd ${./.}
+            cd ${
+              builtins.path {
+                path = ./.;
+                name = "source";
+              }
+            }
             ${pkgs.alejandra}/bin/alejandra --check . && mkdir -p $out
           '';
         };
@@ -102,21 +117,25 @@
         packages = {
           default = self'.packages.rippkgs;
 
-          rippkgs = craneLib.buildPackage (crane-common-args
+          rippkgs = craneLib.buildPackage (
+            crane-common-args
             // {
               inherit cargoArtifacts;
               pname = "rippkgs";
               cargoExtraArgs = "--bin rippkgs";
               meta.mainProgram = "rippkgs";
-            });
+            }
+          );
 
-          rippkgs-index = craneLib.buildPackage (crane-common-args
+          rippkgs-index = craneLib.buildPackage (
+            crane-common-args
             // {
               inherit cargoArtifacts;
               pname = "rippkgs-index";
               cargoExtraArgs = "--bin rippkgs-index";
               meta.mainProgram = "rippkgs-index";
-            });
+            }
+          );
         };
       };
 
