@@ -2,13 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-#[derive(Clone, Copy, Debug, clap::ValueEnum)]
-pub enum Presence {
-    Disk,
-    Cached,
-    Either,
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Package {
     pub attribute: String,
@@ -35,26 +28,13 @@ pub struct Package {
 }
 
 impl Package {
-    pub fn presence(&self, mode: Presence) -> Option<bool> {
-        let disk = || {
-            self.store_paths
-                .as_ref()
-                .and_then(|paths| paths.get("out"))
-                .map(|out| PathBuf::from("/nix/store/").join(out).exists())
-                .unwrap_or(false)
-        };
-
-        match mode {
-            Presence::Disk => Some(disk()),
-            Presence::Cached => self.cached,
-            Presence::Either => {
-                if disk() {
-                    Some(true)
-                } else {
-                    self.cached
-                }
-            }
-        }
+    pub fn is_present(&self) -> bool {
+        self.store_paths
+            .as_ref()
+            .and_then(|paths| paths.get("out"))
+            .map(|out| PathBuf::from("/nix/store/").join(out).exists())
+            .unwrap_or(false)
+            || self.cached.unwrap_or(false)
     }
 
     pub const fn create_table() -> &'static str {

@@ -11,7 +11,7 @@ use clap::Parser;
 use comfy_table::TableComponent;
 use eyre::Context;
 use eyre::Result;
-use rippkgs::{Package, Presence};
+use rippkgs::Package;
 use rusqlite::OpenFlags;
 use xdg::BaseDirectories;
 
@@ -64,15 +64,11 @@ struct Opts {
     #[arg(long)]
     exact: bool,
 
-    /// Filter results by whether the /nix/store path already exists.
+    /// Filter results by whether the output is on disk or in the indexed cache.
     ///
     /// Only applies when doing fuzzy matching.
     #[arg(long)]
     filter_built: bool,
-
-    /// How to determine whether a package is present (disk, substituter cache, or either).
-    #[arg(long, value_enum, default_value_t = Presence::Disk)]
-    presence: Presence,
 
     /// Print the results as json.
     #[arg(long)]
@@ -100,8 +96,8 @@ fn main() -> Result<()> {
     .context("reading index")?;
 
     let results: Box<dyn Iterator<Item = Package>> = if opts.exact {
-        let result = exact::search(opts.query.as_str(), &conn, opts.presence)
-            .context("searching for exact query")?;
+        let result =
+            exact::search(opts.query.as_str(), &conn).context("searching for exact query")?;
 
         Box::new(result.into_iter())
     } else {
@@ -110,7 +106,6 @@ fn main() -> Result<()> {
             &conn,
             opts.max_results,
             opts.filter_built,
-            opts.presence,
         )
         .context("searching for fuzzy query")?;
 

@@ -61,14 +61,11 @@ Use the `rippkgs` cli to search for appropriate packages:
 rippkgs rustc
 ```
 
-`--presence disk` is the default and preserves the original `present` field:
-it tests whether the output exists in the local `/nix/store`. Use
-`--presence cached` to set `present` from the indexed cache result, or
-`--presence either` to accept a local path or a known cache hit. Both exact
-and fuzzy searches support the flag; `--filter-built` filters by the selected
-presence mode. JSON results also include `cached` (`true`, `false`, or `null`).
-Older SQLite indices remain readable and report `cached: null`; with an older
-index, `--presence cached` returns unknown until it is regenerated.
+`present` is true when the output is on disk in `/nix/store` or the index
+records a binary-cache hit. `--filter-built` uses the same definition. JSON
+results also include `cached` (`true`, `false`, or `null`). Older SQLite
+indices remain readable and report `cached: null`, so they use disk presence
+alone until regenerated with `--substituter`.
 
 ## Comparison
 

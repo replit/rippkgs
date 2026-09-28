@@ -4,14 +4,13 @@ use fuzzy_matcher::FuzzyMatcher;
 use rusqlite::functions::Context as FunctionContext;
 use rusqlite::{functions::FunctionFlags, Connection};
 
-use rippkgs::{Package, Presence};
+use rippkgs::Package;
 
 pub fn search(
     query_str: &str,
     db: &Connection,
     num_results: u32,
     filter_built: bool,
-    presence: Presence,
 ) -> eyre::Result<Vec<Package>> {
     db.create_scalar_function(
         "fuzzy_score",
@@ -43,7 +42,7 @@ LIMIT ?2
                 return true;
             };
 
-            let Some(_store_path) = package.store_paths.as_ref().and_then(|x| x.get("out")) else {
+            let Some(_) = package.store_paths.as_ref().and_then(|x| x.get("out")) else {
                 // only None when the package is stdenv (not installable) or part of
                 // bootstrapping (should use other attrs). We always filter these out because
                 // they're almost always irrelevant.
@@ -56,25 +55,21 @@ LIMIT ?2
                 return true;
             }
 
-            package.presence(presence) == Some(true)
+            package.is_present()
         })
         .map(|package_res| {
-            if filter_built {
-                return package_res;
-            }
-
             let Ok(mut package) = package_res else {
                 return package_res;
             };
 
-            let Some(_store_path) = package.store_paths.as_ref().and_then(|x| x.get("out")) else {
+            let Some(_) = package.store_paths.as_ref().and_then(|x| x.get("out")) else {
                 // only None when the package is stdenv (not installable) or part of
                 // bootstrapping (should use other attrs). We always filter these out because
                 // they're almost always irrelevant.
                 return Ok(package);
             };
 
-            package.present = package.presence(presence);
+            package.present = Some(package.is_present());
             Ok(package)
         })
         .take(num_results as _)
@@ -104,7 +99,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fuzzy_search_filters_using_selected_presence() {
+    fn fuzzy_search_uses_disk_or_cache_presence_for_results_and_filtering() {
         let db = Connection::open_in_memory().unwrap();
         db.execute(Package::create_table(), []).unwrap();
         db.execute(
@@ -113,18 +108,19 @@ mod tests {
         )
         .unwrap();
 
-        let results = search("figlet", &db, 10, false, Presence::Cached).unwrap();
+        let results = search("figlet", &db, 10, false).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].present, Some(true));
         assert_eq!(results[0].cached, Some(true));
-        assert!(search("figlet", &db, 10, true, Presence::Disk)
-            .unwrap()
-            .is_empty());
+        let filtered = search("figlet", &db, 10, true).unwrap();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].present, Some(true));
+
+        db.execute("UPDATE packages SET cached = 0", []).unwrap();
         assert_eq!(
-            search("figlet", &db, 10, true, Presence::Either)
-                .unwrap()
-                .len(),
-            1
+            search("figlet", &db, 10, false).unwrap()[0].present,
+            Some(false)
         );
+        assert!(search("figlet", &db, 10, true).unwrap().is_empty());
     }
 }

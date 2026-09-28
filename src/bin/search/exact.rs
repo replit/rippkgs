@@ -1,12 +1,8 @@
 use eyre::Context;
-use rippkgs::{Package, Presence};
+use rippkgs::Package;
 use rusqlite::Connection;
 
-pub fn search(
-    query_str: &str,
-    db: &Connection,
-    presence: Presence,
-) -> eyre::Result<Option<Package>> {
+pub fn search(query_str: &str, db: &Connection) -> eyre::Result<Option<Package>> {
     let result = db.query_row(
         "SELECT *, NULL AS score FROM packages WHERE attribute = ?1",
         rusqlite::params![query_str],
@@ -22,11 +18,11 @@ pub fn search(
                 return Ok(None);
             };
 
-            let Some(_out_path) = store_paths.get("out") else {
+            let Some(_) = store_paths.get("out") else {
                 // this is a package that doesn't have an out path, so it's not installable
                 return Ok(None);
             };
-            res.present = res.presence(presence);
+            res.present = Some(res.is_present());
             Ok(Some(res))
         }
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
@@ -38,13 +34,14 @@ pub fn search(
 mod tests {
     use super::*;
 
-    fn index(with_cache: bool) -> Connection {
+    fn index(with_cache: bool, cached: Option<bool>, out: &str) -> Connection {
         let db = Connection::open_in_memory().unwrap();
+        let store_paths = serde_json::json!({ "out": out }).to_string();
         if with_cache {
             db.execute(Package::create_table(), []).unwrap();
             db.execute(
-                "INSERT INTO packages (attribute, name, storePaths, cached) VALUES (?1, 'figlet', ?2, 1)",
-                rusqlite::params!["figlet", r#"{"out":"00000000000000000000000000000000-figlet"}"#],
+                "INSERT INTO packages (attribute, name, storePaths, cached) VALUES ('figlet', 'figlet', ?1, ?2)",
+                rusqlite::params![store_paths, cached],
             )
             .unwrap();
         } else {
@@ -54,11 +51,8 @@ mod tests {
             )
             .unwrap();
             db.execute(
-                "INSERT INTO packages (attribute, name, storePaths) VALUES (?1, 'figlet', ?2)",
-                rusqlite::params![
-                    "figlet",
-                    r#"{"out":"00000000000000000000000000000000-figlet"}"#
-                ],
+                "INSERT INTO packages (attribute, name, storePaths) VALUES ('figlet', 'figlet', ?1)",
+                [store_paths],
             )
             .unwrap();
         }
@@ -66,12 +60,15 @@ mod tests {
     }
 
     #[test]
-    fn legacy_index_is_readable_with_unknown_cache_status() {
-        let package = search("figlet", &index(false), Presence::Cached)
-            .unwrap()
-            .unwrap();
+    fn legacy_index_uses_disk_presence_and_reports_unknown_cache_status() {
+        let package = search(
+            "figlet",
+            &index(false, None, "00000000000000000000000000000000-figlet"),
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(package.cached, None);
-        assert_eq!(package.present, None);
+        assert_eq!(package.present, Some(false));
         assert_eq!(
             serde_json::to_value(package).unwrap()["cached"],
             serde_json::Value::Null
@@ -79,20 +76,34 @@ mod tests {
     }
 
     #[test]
-    fn presence_modes_preserve_disk_default_and_use_cached_status_when_requested() {
-        let db = index(true);
-        let disk = search("figlet", &db, Presence::Disk).unwrap().unwrap();
-        assert_eq!(disk.present, Some(false));
-        assert_eq!(disk.cached, Some(true));
+    fn cached_package_is_present_without_a_disk_path() {
+        let package = search(
+            "figlet",
+            &index(true, Some(true), "00000000000000000000000000000000-figlet"),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(package.cached, Some(true));
+        assert_eq!(package.present, Some(true));
+    }
 
-        let cached = search("figlet", &db, Presence::Cached).unwrap().unwrap();
-        assert_eq!(cached.present, Some(true));
-        assert_eq!(
-            search("figlet", &db, Presence::Either)
-                .unwrap()
-                .unwrap()
-                .present,
-            Some(true)
-        );
+    #[test]
+    fn cache_miss_remains_present_when_on_disk() {
+        let package = search("figlet", &index(true, Some(false), "."))
+            .unwrap()
+            .unwrap();
+        assert_eq!(package.cached, Some(false));
+        assert_eq!(package.present, Some(true));
+    }
+
+    #[test]
+    fn cache_miss_without_a_disk_path_is_absent() {
+        let package = search(
+            "figlet",
+            &index(true, Some(false), "00000000000000000000000000000000-figlet"),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(package.present, Some(false));
     }
 }
