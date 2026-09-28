@@ -51,6 +51,12 @@ Use the `rippkgs` cli to search for appropriate packages:
 rippkgs rustc
 ```
 
+For exact lookups, `present` is true if the package's `out` path is on disk
+or available from one of the substituters in Nix's configuration. On a cache
+query failure or timeout, only disk presence counts. Fuzzy search and
+`--filter-built` remain disk-only, so broad searches do not make network
+requests. The index and JSON formats are unchanged.
+
 ## Comparison
 
 `nix-env -q` is historically the command that's used to achieve what rippkgs achieves, but the nix evaluation cost is high.

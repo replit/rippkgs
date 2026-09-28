@@ -1,6 +1,7 @@
 mod data;
 mod exact;
 mod fuzzy;
+mod nix;
 
 use std::fmt::Display;
 use std::io::stdout;
@@ -64,7 +65,7 @@ struct Opts {
     #[arg(long)]
     exact: bool,
 
-    /// Filter results by whether the /nix/store path already exists.
+    /// Filter results to indexed packages with an `out` store path.
     ///
     /// Only applies when doing fuzzy matching.
     #[arg(long)]

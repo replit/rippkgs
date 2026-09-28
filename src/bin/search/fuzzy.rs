@@ -52,8 +52,6 @@ LIMIT ?2
             };
 
             if !filter_built {
-                // we don't care about filtering out results based on presence of the store
-                // path.
                 return true;
             }
 
@@ -98,4 +96,37 @@ fn scalar_fuzzy_score(ctx: &FunctionContext) -> rusqlite::Result<i64> {
     }
 
     Ok(MATCHER.fuzzy_match(&choice, &pattern).unwrap_or(0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fuzzy_search_and_filter_built_stay_disk_only() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute(Package::create_table(), []).unwrap();
+        db.execute(
+            "INSERT INTO packages (attribute, name, storePaths) VALUES ('figlet', 'figlet', ?1)",
+            [r#"{"out":"00000000000000000000000000000000-figlet"}"#],
+        )
+        .unwrap();
+
+        let results = search("figlet", &db, 10, false).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].present, Some(false));
+        assert!(search("figlet", &db, 10, true).unwrap().is_empty());
+
+        db.execute("UPDATE packages SET storePaths = ?1", [r#"{"out":"."}"#])
+            .unwrap();
+        assert_eq!(
+            search("figlet", &db, 10, false).unwrap()[0].present,
+            Some(true)
+        );
+        assert_eq!(search("figlet", &db, 10, true).unwrap().len(), 1);
+
+        db.execute("UPDATE packages SET storePaths = NULL", [])
+            .unwrap();
+        assert!(search("figlet", &db, 10, false).unwrap().is_empty());
+    }
 }
