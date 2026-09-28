@@ -1,4 +1,5 @@
 mod data;
+mod substituter;
 
 use std::{
     collections::HashMap,
@@ -39,6 +40,10 @@ struct ImportRegistry {
     /// The location to write the saved index to.
     #[clap(short, long, default_value = "rippkgs-index.sqlite")]
     output: PathBuf,
+
+    /// Check output paths in this binary cache and record their availability.
+    #[clap(long)]
+    substituter: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -58,6 +63,10 @@ struct IndexNixpkgs {
     /// The location to write the saved index to.
     #[clap(short, long, default_value = "rippkgs-index.sqlite")]
     output: PathBuf,
+
+    /// Check output paths in this binary cache and record their availability.
+    #[clap(long)]
+    substituter: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -79,12 +88,17 @@ fn main() -> Result<()> {
         Subcmd::Nixpkgs(opts) => index_nixpkgs(opts).context("indexing nixpkgs")?,
     };
 
-    write_index(output, registry).context("writing index")?;
+    let substituter = match &opts.cmd {
+        Subcmd::Registry(opts) => opts.substituter.as_deref(),
+        Subcmd::Nixpkgs(opts) => opts.substituter.as_deref(),
+    };
+    write_index(output, registry, substituter).context("writing index")?;
 
     Ok(())
 }
 
-fn write_index(index: &Path, registry: Registry) -> Result<()> {
+fn write_index(index: &Path, registry: Registry, substituter: Option<&str>) -> Result<()> {
+    let cached = substituter.map(|url| substituter::availability(&registry, url));
     let mut conn = rusqlite::Connection::open_with_flags(
         index,
         OpenFlags::SQLITE_OPEN_CREATE
@@ -103,8 +117,8 @@ fn write_index(index: &Path, registry: Registry) -> Result<()> {
         let mut create_row_query = tx
             .prepare(
                 r#"
-    INSERT INTO packages (attribute, name, version, storePaths, propagatedBuildInputs, propagatedNativeBuildInputs, description, long_description)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO packages (attribute, name, version, storePaths, propagatedBuildInputs, propagatedNativeBuildInputs, description, long_description, cached)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 "#,
             )
             .context("preparing INSERT query")?;
@@ -123,8 +137,14 @@ fn write_index(index: &Path, registry: Registry) -> Result<()> {
                      description,
                      long_description,
                      score: _score, // score not included in the database
+                     cached: _cached,
                      ..
                  }| {
+                    let cached = store_paths
+                        .as_ref()
+                        .and_then(|paths| paths.get("out"))
+                        .and_then(|path| cached.as_ref()?.get(path).copied())
+                        .flatten();
                     let store_paths = store_paths
                         .map(|store_paths| serde_json::to_string(&store_paths))
                         .transpose()?;
@@ -147,7 +167,8 @@ fn write_index(index: &Path, registry: Registry) -> Result<()> {
                             propagated_build_inputs,
                             propagated_native_build_inputs,
                             description,
-                            long_description
+                            long_description,
+                            cached
                         ])
                         .context("inserting package into database")
                         .map(|_| ())
@@ -256,4 +277,108 @@ fn import_registry(ImportRegistry { registry, .. }: &ImportRegistry) -> Result<R
     );
 
     Ok(res)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
+    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+    fn registry() -> Registry {
+        serde_json::from_str(
+            r#"{
+                "hit": {"storePaths": {"out": "00000000000000000000000000000000-hit"}},
+                "miss": {"storePaths": {"out": "11111111111111111111111111111111-miss"}},
+                "timeout": {"storePaths": {"out": "22222222222222222222222222222222-timeout"}}
+            }"#,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn index_records_cache_hits_misses_and_timeouts() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = thread::spawn(move || {
+            listener.set_nonblocking(true).unwrap();
+            let mut handlers = Vec::new();
+            let deadline = Instant::now() + Duration::from_secs(8);
+            while handlers.len() < 4 && Instant::now() < deadline {
+                match listener.accept() {
+                    Ok((mut stream, _)) => handlers.push(thread::spawn(move || {
+                        let mut request = [0; 4096];
+                        let count = stream.read(&mut request).unwrap();
+                        let request = String::from_utf8_lossy(&request[..count]);
+                        if request.contains("/22222222222222222222222222222222.narinfo") {
+                            thread::sleep(Duration::from_millis(2400));
+                        } else {
+                            let status =
+                                if request.contains("/00000000000000000000000000000000.narinfo") {
+                                    "200 OK"
+                                } else {
+                                    "404 Not Found"
+                                };
+                            write!(stream, "HTTP/1.1 {status}\r\nContent-Length: 0\r\n\r\n")
+                                .unwrap();
+                        }
+                    })),
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(err) => panic!("accept failed: {err}"),
+                }
+            }
+            assert_eq!(handlers.len(), 4, "expected a retry after the timeout");
+            for handler in handlers {
+                handler.join().unwrap();
+            }
+        });
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("rippkgs-{now}.sqlite"));
+        write_index(&path, registry(), Some(&url)).unwrap();
+        server.join().unwrap();
+
+        let db = rusqlite::Connection::open(&path).unwrap();
+        let cached = |attr| {
+            db.query_row(
+                "SELECT cached FROM packages WHERE attribute = ?1",
+                [attr],
+                |row| row.get::<_, Option<bool>>(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(cached("hit"), Some(true));
+        assert_eq!(cached("miss"), Some(false));
+        assert_eq!(cached("timeout"), None);
+        drop(db);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn indexing_without_substituter_records_unknown() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("rippkgs-no-cache-{now}.sqlite"));
+        write_index(&path, registry(), None).unwrap();
+        let db = rusqlite::Connection::open(&path).unwrap();
+        let cached: Option<bool> = db
+            .query_row(
+                "SELECT cached FROM packages WHERE attribute = 'hit'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(cached, None);
+        drop(db);
+        std::fs::remove_file(path).unwrap();
+    }
 }

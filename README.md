@@ -44,12 +44,31 @@ $ nix eval -L .#lib.genRegistry --apply 'f: f (import <nixpkgs> { })' --impure -
 $ rippkgs-index registry -o rippkgs-index.sqlite registry.json
 ```
 
+To record whether each package's `out` path is available from a binary cache,
+pass its base URL to either index-generation command:
+```sh
+rippkgs-index registry --substituter https://cache.nixos.org -o rippkgs-index.sqlite registry.json
+```
+The indexer checks `<substituter>/<store-hash>.narinfo` with up to 16 concurrent
+HEAD requests. A hit records `cached = true`, a 404 records `false`, and
+timeouts or other errors record `null` (unknown). Without `--substituter`,
+`cached` is `null` for every package. Rebuild an index to populate this field.
+
 ### Searching
 
 Use the `rippkgs` cli to search for appropriate packages:
 ```sh
 rippkgs rustc
 ```
+
+`--presence disk` is the default and preserves the original `present` field:
+it tests whether the output exists in the local `/nix/store`. Use
+`--presence cached` to set `present` from the indexed cache result, or
+`--presence either` to accept a local path or a known cache hit. Both exact
+and fuzzy searches support the flag; `--filter-built` filters by the selected
+presence mode. JSON results also include `cached` (`true`, `false`, or `null`).
+Older SQLite indices remain readable and report `cached: null`; with an older
+index, `--presence cached` returns unknown until it is regenerated.
 
 ## Comparison
 

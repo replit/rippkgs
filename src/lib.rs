@@ -1,5 +1,13 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
+
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+pub enum Presence {
+    Disk,
+    Cached,
+    Either,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Package {
@@ -23,9 +31,32 @@ pub struct Package {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub present: Option<bool>,
+    pub cached: Option<bool>,
 }
 
 impl Package {
+    pub fn presence(&self, mode: Presence) -> Option<bool> {
+        let disk = || {
+            self.store_paths
+                .as_ref()
+                .and_then(|paths| paths.get("out"))
+                .map(|out| PathBuf::from("/nix/store/").join(out).exists())
+                .unwrap_or(false)
+        };
+
+        match mode {
+            Presence::Disk => Some(disk()),
+            Presence::Cached => self.cached,
+            Presence::Either => {
+                if disk() {
+                    Some(true)
+                } else {
+                    self.cached
+                }
+            }
+        }
+    }
+
     pub const fn create_table() -> &'static str {
         r#"
 CREATE TABLE packages (
@@ -37,6 +68,7 @@ CREATE TABLE packages (
     propagatedNativeBuildInputs TEXT,
     description TEXT,
     long_description TEXT,
+    cached INTEGER,
     PRIMARY KEY (attribute)
 )
         "#
@@ -56,6 +88,11 @@ impl<'r, 'd> TryFrom<&'r rusqlite::Row<'d>> for Package {
         let version: Option<String> = row.get("version")?;
         let description: Option<String> = row.get("description")?;
         let long_description: Option<String> = row.get("long_description")?;
+        let cached = match row.get("cached") {
+            Ok(value) => value,
+            Err(rusqlite::Error::InvalidColumnName(_)) => None,
+            Err(err) => return Err(err),
+        };
 
         let score = if cfg!(debug_assertions) {
             row.get("score")?
@@ -105,6 +142,7 @@ impl<'r, 'd> TryFrom<&'r rusqlite::Row<'d>> for Package {
             propagated_native_build_inputs,
             score,
             present: Default::default(),
+            cached,
         })
     }
 }
