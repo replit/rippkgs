@@ -24,7 +24,8 @@ pub struct Package {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub present: Option<bool>,
-    pub cached: Option<bool>,
+    #[serde(skip)]
+    pub cached: bool,
 }
 
 impl Package {
@@ -34,7 +35,7 @@ impl Package {
             .and_then(|paths| paths.get("out"))
             .map(|out| PathBuf::from("/nix/store/").join(out).exists())
             .unwrap_or(false)
-            || self.cached.unwrap_or(false)
+            || self.cached
     }
 
     pub const fn create_table() -> &'static str {
@@ -48,7 +49,6 @@ CREATE TABLE packages (
     propagatedNativeBuildInputs TEXT,
     description TEXT,
     long_description TEXT,
-    cached INTEGER,
     PRIMARY KEY (attribute)
 )
         "#
@@ -68,11 +68,7 @@ impl<'r, 'd> TryFrom<&'r rusqlite::Row<'d>> for Package {
         let version: Option<String> = row.get("version")?;
         let description: Option<String> = row.get("description")?;
         let long_description: Option<String> = row.get("long_description")?;
-        let cached = match row.get("cached") {
-            Ok(value) => value,
-            Err(rusqlite::Error::InvalidColumnName(_)) => None,
-            Err(err) => return Err(err),
-        };
+        let cached: bool = row.get("cached")?;
 
         let score = if cfg!(debug_assertions) {
             row.get("score")?

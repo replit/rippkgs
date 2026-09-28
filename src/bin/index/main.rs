@@ -114,11 +114,24 @@ fn write_index(index: &Path, registry: Registry, substituter: Option<&str>) -> R
     let tx = conn.transaction().context("starting transaction")?;
 
     {
+        let mut create_cached_row_query = if cached.is_some() {
+            tx.execute(
+                "CREATE TABLE cached_packages (attribute TEXT NOT NULL PRIMARY KEY)",
+                [],
+            )
+            .context("creating cached packages table")?;
+            Some(
+                tx.prepare("INSERT INTO cached_packages (attribute) VALUES (?1)")
+                    .context("preparing cached packages INSERT query")?,
+            )
+        } else {
+            None
+        };
         let mut create_row_query = tx
             .prepare(
                 r#"
-    INSERT INTO packages (attribute, name, version, storePaths, propagatedBuildInputs, propagatedNativeBuildInputs, description, long_description, cached)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO packages (attribute, name, version, storePaths, propagatedBuildInputs, propagatedNativeBuildInputs, description, long_description)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 "#,
             )
             .context("preparing INSERT query")?;
@@ -137,14 +150,21 @@ fn write_index(index: &Path, registry: Registry, substituter: Option<&str>) -> R
                      description,
                      long_description,
                      score: _score, // score not included in the database
-                     cached: _cached,
                      ..
                  }| {
-                    let cached = store_paths
+                    let is_cached = store_paths
                         .as_ref()
                         .and_then(|paths| paths.get("out"))
                         .and_then(|path| cached.as_ref()?.get(path).copied())
-                        .flatten();
+                        .flatten()
+                        == Some(true);
+                    if is_cached {
+                        if let Some(query) = create_cached_row_query.as_mut() {
+                            query
+                                .execute(rusqlite::params![&attribute])
+                                .context("inserting cached package")?;
+                        }
+                    }
                     let store_paths = store_paths
                         .map(|store_paths| serde_json::to_string(&store_paths))
                         .transpose()?;
@@ -167,8 +187,7 @@ fn write_index(index: &Path, registry: Registry, substituter: Option<&str>) -> R
                             propagated_build_inputs,
                             propagated_native_build_inputs,
                             description,
-                            long_description,
-                            cached
+                            long_description
                         ])
                         .context("inserting package into database")
                         .map(|_| ())
@@ -298,6 +317,29 @@ mod tests {
         .unwrap()
     }
 
+    const MAIN_PACKAGES_DDL: &str = "CREATE TABLE packages (
+    attribute TEXT NOT NULL,
+    name TEXT,
+    version TEXT,
+    storePaths TEXT,
+    propagatedBuildInputs TEXT,
+    propagatedNativeBuildInputs TEXT,
+    description TEXT,
+    long_description TEXT,
+    PRIMARY KEY (attribute)
+)";
+
+    fn tables(db: &rusqlite::Connection) -> Vec<String> {
+        let mut query = db
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+            .unwrap();
+        query
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    }
+
     #[test]
     fn index_records_cache_hits_misses_and_timeouts() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -346,23 +388,32 @@ mod tests {
         server.join().unwrap();
 
         let db = rusqlite::Connection::open(&path).unwrap();
-        let cached = |attr| {
-            db.query_row(
-                "SELECT cached FROM packages WHERE attribute = ?1",
-                [attr],
-                |row| row.get::<_, Option<bool>>(0),
+        assert_eq!(tables(&db), vec!["cached_packages", "packages"]);
+        let package_schema: String = db
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE name = 'packages'",
+                [],
+                |row| row.get(0),
             )
-            .unwrap()
+            .unwrap();
+        assert_eq!(package_schema, MAIN_PACKAGES_DDL);
+        let hits: Vec<String> = {
+            let mut query = db
+                .prepare("SELECT attribute FROM cached_packages ORDER BY attribute")
+                .unwrap();
+            query
+                .query_map([], |row| row.get(0))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect()
         };
-        assert_eq!(cached("hit"), Some(true));
-        assert_eq!(cached("miss"), Some(false));
-        assert_eq!(cached("timeout"), None);
+        assert_eq!(hits, vec!["hit"]);
         drop(db);
         std::fs::remove_file(path).unwrap();
     }
 
     #[test]
-    fn indexing_without_substituter_records_unknown() {
+    fn indexing_without_substituter_preserves_main_schema() {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -370,14 +421,42 @@ mod tests {
         let path = std::env::temp_dir().join(format!("rippkgs-no-cache-{now}.sqlite"));
         write_index(&path, registry(), None).unwrap();
         let db = rusqlite::Connection::open(&path).unwrap();
-        let cached: Option<bool> = db
+        let package_schema: String = db
             .query_row(
-                "SELECT cached FROM packages WHERE attribute = 'hit'",
+                "SELECT sql FROM sqlite_master WHERE name = 'packages'",
                 [],
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(cached, None);
+        assert_eq!(package_schema, MAIN_PACKAGES_DDL);
+        assert_eq!(tables(&db), vec!["packages"]);
+        let rows: Vec<(String, String)> = {
+            let mut query = db
+                .prepare("SELECT attribute, storePaths FROM packages ORDER BY attribute")
+                .unwrap();
+            query
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect()
+        };
+        assert_eq!(
+            rows,
+            vec![
+                (
+                    "hit".to_string(),
+                    r#"{"out":"00000000000000000000000000000000-hit"}"#.to_string()
+                ),
+                (
+                    "miss".to_string(),
+                    r#"{"out":"11111111111111111111111111111111-miss"}"#.to_string()
+                ),
+                (
+                    "timeout".to_string(),
+                    r#"{"out":"22222222222222222222222222222222-timeout"}"#.to_string()
+                )
+            ]
+        );
         drop(db);
         std::fs::remove_file(path).unwrap();
     }

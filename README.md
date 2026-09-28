@@ -50,9 +50,10 @@ pass its base URL to either index-generation command:
 rippkgs-index registry --substituter https://cache.nixos.org -o rippkgs-index.sqlite registry.json
 ```
 The indexer checks `<substituter>/<store-hash>.narinfo` with up to 16 concurrent
-HEAD requests. A hit records `cached = true`, a 404 records `false`, and
-timeouts or other errors record `null` (unknown). Without `--substituter`,
-`cached` is `null` for every package. Rebuild an index to populate this field.
+HEAD requests. Confirmed hits are stored in a separate `cached_packages`
+table; 404s and timeouts are not treated as hits. Without `--substituter`,
+the index keeps its original schema. Rebuild an index with this option to
+include cache availability.
 
 ### Searching
 
@@ -62,10 +63,9 @@ rippkgs rustc
 ```
 
 `present` is true when the output is on disk in `/nix/store` or the index
-records a binary-cache hit. `--filter-built` uses the same definition. JSON
-results also include `cached` (`true`, `false`, or `null`). Older SQLite
-indices remain readable and report `cached: null`, so they use disk presence
-alone until regenerated with `--substituter`.
+records a binary-cache hit. `--filter-built` uses the same definition.
+Existing indices without `cached_packages` remain readable and use disk
+presence alone. The JSON result fields are unchanged.
 
 ## Comparison
 

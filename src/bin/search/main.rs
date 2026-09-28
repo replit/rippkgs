@@ -95,9 +95,17 @@ fn main() -> Result<()> {
     )
     .context("reading index")?;
 
+    let has_cache = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'cached_packages')",
+            [],
+            |row| row.get::<_, bool>(0),
+        )
+        .context("checking cache table")?;
+
     let results: Box<dyn Iterator<Item = Package>> = if opts.exact {
-        let result =
-            exact::search(opts.query.as_str(), &conn).context("searching for exact query")?;
+        let result = exact::search(opts.query.as_str(), &conn, has_cache)
+            .context("searching for exact query")?;
 
         Box::new(result.into_iter())
     } else {
@@ -106,6 +114,7 @@ fn main() -> Result<()> {
             &conn,
             opts.max_results,
             opts.filter_built,
+            has_cache,
         )
         .context("searching for fuzzy query")?;
 

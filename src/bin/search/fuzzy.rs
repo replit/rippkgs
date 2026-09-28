@@ -11,6 +11,7 @@ pub fn search(
     db: &Connection,
     num_results: u32,
     filter_built: bool,
+    has_cache: bool,
 ) -> eyre::Result<Vec<Package>> {
     db.create_scalar_function(
         "fuzzy_score",
@@ -20,16 +21,20 @@ pub fn search(
     )
     .context("installing `fuzzy_score` function")?;
 
-    let mut query = db
-        .prepare(
-            r#"
-SELECT *, fuzzy_score(name, ?1) as score
+    let cache_expression = if has_cache {
+        "EXISTS(SELECT 1 FROM cached_packages WHERE attribute = packages.attribute)"
+    } else {
+        "0"
+    };
+    let sql = format!(
+        r#"
+SELECT packages.*, fuzzy_score(name, ?1) as score, {cache_expression} AS cached
 FROM packages
 ORDER BY score DESC
 LIMIT ?2
             "#,
-        )
-        .context("preparing query")?;
+    );
+    let mut query = db.prepare(&sql).context("preparing query")?;
 
     let res = query
         .query_map(rusqlite::params![query_str, num_results], |r| {
@@ -103,24 +108,36 @@ mod tests {
         let db = Connection::open_in_memory().unwrap();
         db.execute(Package::create_table(), []).unwrap();
         db.execute(
-            "INSERT INTO packages (attribute, name, storePaths, cached) VALUES ('figlet', 'figlet', ?1, 1)",
+            "CREATE TABLE cached_packages (attribute TEXT NOT NULL PRIMARY KEY)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO packages (attribute, name, storePaths) VALUES ('figlet', 'figlet', ?1)",
             [r#"{"out":"00000000000000000000000000000000-figlet"}"#],
         )
         .unwrap();
+        db.execute("INSERT INTO cached_packages VALUES ('figlet')", [])
+            .unwrap();
 
-        let results = search("figlet", &db, 10, false).unwrap();
+        let results = search("figlet", &db, 10, false, true).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].present, Some(true));
-        assert_eq!(results[0].cached, Some(true));
-        let filtered = search("figlet", &db, 10, true).unwrap();
+        assert!(results[0].cached);
+        assert!(serde_json::to_value(&results[0])
+            .unwrap()
+            .get("cached")
+            .is_none());
+        let filtered = search("figlet", &db, 10, true, true).unwrap();
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].present, Some(true));
 
-        db.execute("UPDATE packages SET cached = 0", []).unwrap();
+        db.execute("DELETE FROM cached_packages", []).unwrap();
         assert_eq!(
-            search("figlet", &db, 10, false).unwrap()[0].present,
+            search("figlet", &db, 10, false, true).unwrap()[0].present,
             Some(false)
         );
-        assert!(search("figlet", &db, 10, true).unwrap().is_empty());
+        assert!(search("figlet", &db, 10, true, true).unwrap().is_empty());
+        assert!(search("figlet", &db, 10, true, false).unwrap().is_empty());
     }
 }
