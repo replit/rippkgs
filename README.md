@@ -44,17 +44,6 @@ $ nix eval -L .#lib.genRegistry --apply 'f: f (import <nixpkgs> { })' --impure -
 $ rippkgs-index registry -o rippkgs-index.sqlite registry.json
 ```
 
-To record whether each package's `out` path is available from a binary cache,
-pass its base URL to either index-generation command:
-```sh
-rippkgs-index registry --substituter https://cache.nixos.org -o rippkgs-index.sqlite registry.json
-```
-The indexer checks `<substituter>/<store-hash>.narinfo` with up to 16 concurrent
-HEAD requests. Confirmed hits are stored in a separate `cached_packages`
-table; 404s and timeouts are not treated as hits. Without `--substituter`,
-the index keeps its original schema. Rebuild an index with this option to
-include cache availability.
-
 ### Searching
 
 Use the `rippkgs` cli to search for appropriate packages:
@@ -62,10 +51,11 @@ Use the `rippkgs` cli to search for appropriate packages:
 rippkgs rustc
 ```
 
-`present` is true when the output is on disk in `/nix/store` or the index
-records a binary-cache hit. `--filter-built` uses the same definition.
-Existing indices without `cached_packages` remain readable and use disk
-presence alone. The JSON result fields are unchanged.
+For exact lookups, `present` is true if the package's `out` path is on disk
+or available from one of the substituters in Nix's configuration. On a cache
+query failure or timeout, only disk presence counts. Fuzzy search and
+`--filter-built` remain disk-only, so broad searches do not make network
+requests. The index and JSON formats are unchanged.
 
 ## Comparison
 

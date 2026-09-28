@@ -1,6 +1,7 @@
 mod data;
 mod exact;
 mod fuzzy;
+mod nix;
 
 use std::fmt::Display;
 use std::io::stdout;
@@ -64,7 +65,7 @@ struct Opts {
     #[arg(long)]
     exact: bool,
 
-    /// Filter results by whether the output is on disk or in the indexed cache.
+    /// Filter results to indexed packages with an `out` store path.
     ///
     /// Only applies when doing fuzzy matching.
     #[arg(long)]
@@ -95,17 +96,9 @@ fn main() -> Result<()> {
     )
     .context("reading index")?;
 
-    let has_cache = conn
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'cached_packages')",
-            [],
-            |row| row.get::<_, bool>(0),
-        )
-        .context("checking cache table")?;
-
     let results: Box<dyn Iterator<Item = Package>> = if opts.exact {
-        let result = exact::search(opts.query.as_str(), &conn, has_cache)
-            .context("searching for exact query")?;
+        let result =
+            exact::search(opts.query.as_str(), &conn).context("searching for exact query")?;
 
         Box::new(result.into_iter())
     } else {
@@ -114,7 +107,6 @@ fn main() -> Result<()> {
             &conn,
             opts.max_results,
             opts.filter_built,
-            has_cache,
         )
         .context("searching for fuzzy query")?;
 

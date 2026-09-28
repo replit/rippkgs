@@ -72,7 +72,6 @@ impl PackageInfo {
             long_description: long_description.flatten(),
             score: None,
             present: None,
-            cached: false,
         }
     }
 }

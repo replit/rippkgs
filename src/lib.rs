@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Package {
@@ -24,20 +23,9 @@ pub struct Package {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub present: Option<bool>,
-    #[serde(skip)]
-    pub cached: bool,
 }
 
 impl Package {
-    pub fn is_present(&self) -> bool {
-        self.store_paths
-            .as_ref()
-            .and_then(|paths| paths.get("out"))
-            .map(|out| PathBuf::from("/nix/store/").join(out).exists())
-            .unwrap_or(false)
-            || self.cached
-    }
-
     pub const fn create_table() -> &'static str {
         r#"
 CREATE TABLE packages (
@@ -68,7 +56,6 @@ impl<'r, 'd> TryFrom<&'r rusqlite::Row<'d>> for Package {
         let version: Option<String> = row.get("version")?;
         let description: Option<String> = row.get("description")?;
         let long_description: Option<String> = row.get("long_description")?;
-        let cached: bool = row.get("cached")?;
 
         let score = if cfg!(debug_assertions) {
             row.get("score")?
@@ -118,7 +105,6 @@ impl<'r, 'd> TryFrom<&'r rusqlite::Row<'d>> for Package {
             propagated_native_build_inputs,
             score,
             present: Default::default(),
-            cached,
         })
     }
 }

@@ -1,5 +1,4 @@
 mod data;
-mod substituter;
 
 use std::{
     collections::HashMap,
@@ -40,10 +39,6 @@ struct ImportRegistry {
     /// The location to write the saved index to.
     #[clap(short, long, default_value = "rippkgs-index.sqlite")]
     output: PathBuf,
-
-    /// Check output paths in this binary cache and record their availability.
-    #[clap(long)]
-    substituter: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -63,10 +58,6 @@ struct IndexNixpkgs {
     /// The location to write the saved index to.
     #[clap(short, long, default_value = "rippkgs-index.sqlite")]
     output: PathBuf,
-
-    /// Check output paths in this binary cache and record their availability.
-    #[clap(long)]
-    substituter: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -88,17 +79,12 @@ fn main() -> Result<()> {
         Subcmd::Nixpkgs(opts) => index_nixpkgs(opts).context("indexing nixpkgs")?,
     };
 
-    let substituter = match &opts.cmd {
-        Subcmd::Registry(opts) => opts.substituter.as_deref(),
-        Subcmd::Nixpkgs(opts) => opts.substituter.as_deref(),
-    };
-    write_index(output, registry, substituter).context("writing index")?;
+    write_index(output, registry).context("writing index")?;
 
     Ok(())
 }
 
-fn write_index(index: &Path, registry: Registry, substituter: Option<&str>) -> Result<()> {
-    let cached = substituter.map(|url| substituter::availability(&registry, url));
+fn write_index(index: &Path, registry: Registry) -> Result<()> {
     let mut conn = rusqlite::Connection::open_with_flags(
         index,
         OpenFlags::SQLITE_OPEN_CREATE
@@ -114,19 +100,6 @@ fn write_index(index: &Path, registry: Registry, substituter: Option<&str>) -> R
     let tx = conn.transaction().context("starting transaction")?;
 
     {
-        let mut create_cached_row_query = if cached.is_some() {
-            tx.execute(
-                "CREATE TABLE cached_packages (attribute TEXT NOT NULL PRIMARY KEY)",
-                [],
-            )
-            .context("creating cached packages table")?;
-            Some(
-                tx.prepare("INSERT INTO cached_packages (attribute) VALUES (?1)")
-                    .context("preparing cached packages INSERT query")?,
-            )
-        } else {
-            None
-        };
         let mut create_row_query = tx
             .prepare(
                 r#"
@@ -152,19 +125,6 @@ fn write_index(index: &Path, registry: Registry, substituter: Option<&str>) -> R
                      score: _score, // score not included in the database
                      ..
                  }| {
-                    let is_cached = store_paths
-                        .as_ref()
-                        .and_then(|paths| paths.get("out"))
-                        .and_then(|path| cached.as_ref()?.get(path).copied())
-                        .flatten()
-                        == Some(true);
-                    if is_cached {
-                        if let Some(query) = create_cached_row_query.as_mut() {
-                            query
-                                .execute(rusqlite::params![&attribute])
-                                .context("inserting cached package")?;
-                        }
-                    }
                     let store_paths = store_paths
                         .map(|store_paths| serde_json::to_string(&store_paths))
                         .transpose()?;
@@ -296,168 +256,4 @@ fn import_registry(ImportRegistry { registry, .. }: &ImportRegistry) -> Result<R
     );
 
     Ok(res)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::{Read, Write};
-    use std::net::TcpListener;
-    use std::thread;
-    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-
-    fn registry() -> Registry {
-        serde_json::from_str(
-            r#"{
-                "hit": {"storePaths": {"out": "00000000000000000000000000000000-hit"}},
-                "miss": {"storePaths": {"out": "11111111111111111111111111111111-miss"}},
-                "timeout": {"storePaths": {"out": "22222222222222222222222222222222-timeout"}}
-            }"#,
-        )
-        .unwrap()
-    }
-
-    const MAIN_PACKAGES_DDL: &str = "CREATE TABLE packages (
-    attribute TEXT NOT NULL,
-    name TEXT,
-    version TEXT,
-    storePaths TEXT,
-    propagatedBuildInputs TEXT,
-    propagatedNativeBuildInputs TEXT,
-    description TEXT,
-    long_description TEXT,
-    PRIMARY KEY (attribute)
-)";
-
-    fn tables(db: &rusqlite::Connection) -> Vec<String> {
-        let mut query = db
-            .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
-            .unwrap();
-        query
-            .query_map([], |row| row.get(0))
-            .unwrap()
-            .map(Result::unwrap)
-            .collect()
-    }
-
-    #[test]
-    fn index_records_cache_hits_misses_and_timeouts() {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let url = format!("http://{}", listener.local_addr().unwrap());
-        let server = thread::spawn(move || {
-            listener.set_nonblocking(true).unwrap();
-            let mut handlers = Vec::new();
-            let deadline = Instant::now() + Duration::from_secs(8);
-            while handlers.len() < 4 && Instant::now() < deadline {
-                match listener.accept() {
-                    Ok((mut stream, _)) => handlers.push(thread::spawn(move || {
-                        let mut request = [0; 4096];
-                        let count = stream.read(&mut request).unwrap();
-                        let request = String::from_utf8_lossy(&request[..count]);
-                        if request.contains("/22222222222222222222222222222222.narinfo") {
-                            thread::sleep(Duration::from_millis(2400));
-                        } else {
-                            let status =
-                                if request.contains("/00000000000000000000000000000000.narinfo") {
-                                    "200 OK"
-                                } else {
-                                    "404 Not Found"
-                                };
-                            write!(stream, "HTTP/1.1 {status}\r\nContent-Length: 0\r\n\r\n")
-                                .unwrap();
-                        }
-                    })),
-                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                        thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(err) => panic!("accept failed: {err}"),
-                }
-            }
-            assert_eq!(handlers.len(), 4, "expected a retry after the timeout");
-            for handler in handlers {
-                handler.join().unwrap();
-            }
-        });
-
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("rippkgs-{now}.sqlite"));
-        write_index(&path, registry(), Some(&url)).unwrap();
-        server.join().unwrap();
-
-        let db = rusqlite::Connection::open(&path).unwrap();
-        assert_eq!(tables(&db), vec!["cached_packages", "packages"]);
-        let package_schema: String = db
-            .query_row(
-                "SELECT sql FROM sqlite_master WHERE name = 'packages'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(package_schema, MAIN_PACKAGES_DDL);
-        let hits: Vec<String> = {
-            let mut query = db
-                .prepare("SELECT attribute FROM cached_packages ORDER BY attribute")
-                .unwrap();
-            query
-                .query_map([], |row| row.get(0))
-                .unwrap()
-                .map(Result::unwrap)
-                .collect()
-        };
-        assert_eq!(hits, vec!["hit"]);
-        drop(db);
-        std::fs::remove_file(path).unwrap();
-    }
-
-    #[test]
-    fn indexing_without_substituter_preserves_main_schema() {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("rippkgs-no-cache-{now}.sqlite"));
-        write_index(&path, registry(), None).unwrap();
-        let db = rusqlite::Connection::open(&path).unwrap();
-        let package_schema: String = db
-            .query_row(
-                "SELECT sql FROM sqlite_master WHERE name = 'packages'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(package_schema, MAIN_PACKAGES_DDL);
-        assert_eq!(tables(&db), vec!["packages"]);
-        let rows: Vec<(String, String)> = {
-            let mut query = db
-                .prepare("SELECT attribute, storePaths FROM packages ORDER BY attribute")
-                .unwrap();
-            query
-                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-                .unwrap()
-                .map(Result::unwrap)
-                .collect()
-        };
-        assert_eq!(
-            rows,
-            vec![
-                (
-                    "hit".to_string(),
-                    r#"{"out":"00000000000000000000000000000000-hit"}"#.to_string()
-                ),
-                (
-                    "miss".to_string(),
-                    r#"{"out":"11111111111111111111111111111111-miss"}"#.to_string()
-                ),
-                (
-                    "timeout".to_string(),
-                    r#"{"out":"22222222222222222222222222222222-timeout"}"#.to_string()
-                )
-            ]
-        );
-        drop(db);
-        std::fs::remove_file(path).unwrap();
-    }
 }
